@@ -1,0 +1,85 @@
+/* @heroui/styles already bundles tailwindcss + tw-animate-css internally */
+@import "@heroui/styles";
+
+/* ── Institutional Green theme ──────────────────────────────────────────────
+   Override HeroUI CSS variables after the import so they win.
+   Calculated variables (soft, hover, border-secondary, …) derive from these
+   automatically via color-mix() inside @heroui/styles.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Canvas */
+  --background: #f7f9fb;
+  --foreground: #191c1e;
+
+  /* Surface layers — card → page depth */
+  --surface:            #ffffff;
+  --surface-foreground: #191c1e;
+  --surface-secondary:  #f2f4f6;
+  --surface-tertiary:   #eceef0;
+
+  /* Overlay (modals, popovers, tooltips) */
+  --overlay:            #ffffff;
+  --overlay-foreground: #191c1e;
+
+  /* Primary accent — Institutional Green (#0D4732) */
+  --accent:            #0d4732;
+  --accent-foreground: #ffffff;
+
+  /* Neutral interactive elements */
+  --default:            #e0e3e5;
+  --default-foreground: #191c1e;
+
+  /* Muted / secondary text */
+  --muted: #707973;
+
+  /* Borders & separators */
+  --border:    #c0c9c2;
+  --separator: #d8dadc;
+
+  /* Form fields — visible borders per design spec */
+  --field-border:       #c0c9c2;
+  --field-border-width: 1px;
+  --field-border-focus: #0d4732;
+
+  /* Focus ring */
+  --focus: #0d4732;
+
+  /* Status */
+  --success:            #0a6b44;
+  --success-foreground: #ffffff;
+  --warning:            #92400e;
+  --warning-foreground: #ffffff;
+  --danger:             #ba1a1a;
+  --danger-foreground:  #ffffff;
+
+  /* Shape — 4px default (design: Soft 0.25rem) */
+  --radius:       0.25rem;
+  --field-radius: 0.25rem;
+
+  /* Modal backdrop: primary-tinted scrim */
+  --backdrop: rgba(0, 47, 31, 0.55);
+
+  /* Elevation — low-contrast "paper" model, no dramatic shadows */
+  --surface-shadow:
+    0 0 0 1px #e0e3e5,
+    0 2px 4px rgba(0, 0, 0, 0.04);
+  --overlay-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.05),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+  --field-shadow: none;
+}
+
+/* ── Typography ─────────────────────────────────────────────────────────────
+   --font-ibm-plex-sans → set by next/font on <html>
+   --font-inter         → set by next/font on <html>
+   --font-jetbrains-mono→ set by next/font on <html>
+   Map to Tailwind v4 font-family tokens so utilities work:
+     font-display → IBM Plex Sans  (headings)
+     font-sans    → Inter          (body — default)
+     font-mono    → JetBrains Mono (labels, numerical data)
+   ────────────────────────────────────────────────────────────────────────── */
+@theme {
+  --font-display: var(--font-ibm-plex-sans);
+  --font-sans:    var(--font-inter);
+  --font-mono:    var(--font-jetbrains-mono);
+}

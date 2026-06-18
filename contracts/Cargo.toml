@@ -1,0 +1,65 @@
+[workspace]
+resolver = "2"
+members = [
+  "contracts/*",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+repository = "https://github.com/nvnx7/stellar-multisig"
+
+[workspace.dependencies]
+# local crates
+contract-types = { path = "contracts/types" }
+soroban-utils = { path = "contracts/soroban-utils" }
+circuit-keys = { path = "contracts/circuit-keys" }
+soroban-poseidon = { version = "26" }
+
+soroban-sdk = { version = "26", default-features = false, features = ["hazmat"] }
+
+ark-bn254 = { version = "0.6.0", default-features = false, features = ["curve"] }
+ark-circom = { git = "https://github.com/NethermindEth/circom-compat.git", default-features = false, branch = "wasm-no-parallel" }
+ark-ec = { version = "0.6.0", default-features = false }
+ark-ff = { version = "0.6.0", default-features = false }
+ark-groth16 = { version = "0.6.0", default-features = false }
+ark-relations = { version = "0.6.0", default-features = false }
+ark-serialize = { version = "0.6.0", default-features = false }
+ark-std = { version = "0.6.0", default-features = false, features = ["std"] }
+
+anyhow = { version = "1" }
+
+num-bigint = { version = "0.4.6", default-features = false, features = ["serde"] }
+serde_json = { version = "1", default-features = false }
+
+[workspace.lints.rust]
+missing_docs = "allow"
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+arithmetic_side_effects = "deny"
+cast_lossless = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_precision_loss = "deny"
+cast_sign_loss = "deny"
+needless_return = "deny"
+panicking_overflow_checks = "deny"
+unwrap_used = "deny"
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
+
+# For more information about this profile see https://developers.stellar.org/docs/build/smart-contracts/example-contracts/logging#cargotoml-profile
+[profile.release-with-logs]
+inherits = "release"
+debug-assertions = true
