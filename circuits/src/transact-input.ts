@@ -1,28 +1,40 @@
 /**
- * Builds the witness input object for the Spend circuit.
+ * Builds the witness input object for the Transact circuit.
  *
  * The `msg` field that FROST signers must sign is:
  *   Poseidon(root, nullifiers[0..N-1], output_commitments[0,1],
- *            public_deposit_amount, public_withdraw_amount)
+ *            public_amount, ext_data_hash)
  *
- * This mirrors exactly what spend.circom computes internally, binding the
+ * This mirrors exactly what transact.circom computes internally, binding the
  * signature to the transaction's public data.
  */
 
-import { Point } from "./babyjubjub.ts";
-import { MerkleProof, buildFullMerkleProof } from "./merkle.ts";
-import { Note, noteCommitment, noteNullifier } from "./note.ts";
-import { poseidonHash } from "./poseidon.ts";
-import type { FrostSignature } from "./frost.ts";
+import {
+  type MerkleProof,
+  buildFullMerkleProof,
+  type Note,
+  noteCommitment,
+  noteNullifier,
+  poseidonHash,
+  type FrostSignature,
+} from "nexus-crypto";
 
-export type SpendInput = {
-  // public
+/**
+ * Canonical empty-leaf value for the commitment tree: Poseidon("XLM") =
+ * Poseidon(88, 76, 77). MUST match the pool contract's `get_zeroes()[0]`.
+ */
+export const ZERO_LEAF: bigint = poseidonHash([88n, 76n, 77n]);
+
+export type TransactInput = {
+  // public — declared in the same order the pool contract feeds the verifier:
+  //   [root, public_amount, ext_data_hash, nullifiers, output_commitments]
   root: bigint;
+  public_amount: bigint;
+  ext_data_hash: bigint;
   nullifiers: bigint[];
   output_commitments: bigint[];
+  // private — FROST aggregate public key
   agg_pubkey: [bigint, bigint];
-  public_deposit_amount: bigint;
-  public_withdraw_amount: bigint;
   // private — per input
   amounts: bigint[];
   salts: bigint[];
@@ -42,49 +54,48 @@ export type SpendInput = {
  * Derives the message field element that FROST signers should sign.
  * Call this before running FROST; pass the result to `frostSign` / `schnorrSign`.
  */
-export function deriveSpendMsg(params: {
+export function deriveTransactMsg(params: {
   root: bigint;
   nullifiers: bigint[];           // length N_INPUTS
   outputCommitments: bigint[];    // length 2
-  publicDepositAmount: bigint;
-  publicWithdrawAmount: bigint;
+  publicAmount: bigint;
+  extDataHash: bigint;
 }): bigint {
-  // Must match Poseidon(4 + N_INPUTS inputs) in spend.circom:
+  // Must match Poseidon(5 + N_INPUTS inputs) in transact.circom:
   //   inputs[0]           = root
   //   inputs[1..N]        = nullifiers
   //   inputs[N+1]         = output_commitments[0]
   //   inputs[N+2]         = output_commitments[1]
-  //   inputs[N+3]         = public_deposit_amount
-  // Note: public_withdraw_amount is NOT in the hash (it's implied by conservation).
-  // Wait — the circuit uses Poseidon(4 + N_INPUTS) so let's align precisely.
-  // Looking at spend.circom: inputs 0..3+N are root, nullifiers[N], oc[0], oc[1], deposit.
+  //   inputs[N+3]         = public_amount
+  //   inputs[N+4]         = ext_data_hash
   return poseidonHash([
     params.root,
     ...params.nullifiers,
     params.outputCommitments[0]!,
     params.outputCommitments[1]!,
-    params.publicDepositAmount,
+    params.publicAmount,
+    params.extDataHash,
   ]);
 }
 
-export type SpendParams = {
+export type TransactParams = {
   inputNotes: { note: Note; index: number }[];   // must have N_INPUTS entries
   outputNotes: [Note, Note];                     // [recipient, change]
   merkleTreeLevels: number;
-  publicDepositAmount?: bigint;
-  publicWithdrawAmount?: bigint;
+  publicAmount?: bigint;
+  extDataHash?: bigint;
   // Merkle proofs can be supplied or auto-built (sparse tree, one note per input)
   merkleProofs?: MerkleProof[];
   signature: FrostSignature;
 };
 
-export function buildSpendInput(params: SpendParams): SpendInput {
+export function buildTransactInput(params: TransactParams): TransactInput {
   const {
     inputNotes,
     outputNotes,
     merkleTreeLevels,
-    publicDepositAmount = 0n,
-    publicWithdrawAmount = 0n,
+    publicAmount = 0n,
+    extDataHash = 0n,
     signature,
   } = params;
 
@@ -97,16 +108,16 @@ export function buildSpendInput(params: SpendParams): SpendInput {
   );
 
   // Build Merkle proofs from a single shared tree so all roots are identical.
-  // Leaves are ordered by note index; gaps are filled with 0n.
+  // Leaves are ordered by note index; gaps are filled with the canonical zero leaf.
   const proofs: MerkleProof[] = (() => {
     if (params.merkleProofs) return params.merkleProofs;
     const maxIdx = Math.max(...inputNotes.map((n) => n.index));
-    const leaves: bigint[] = Array(maxIdx + 1).fill(0n);
+    const leaves: bigint[] = Array(maxIdx + 1).fill(ZERO_LEAF);
     inputNotes.forEach(({ index }, i) => {
       leaves[index] = commitments[i]!;
     });
     return inputNotes.map(({ index }) =>
-      buildFullMerkleProof(merkleTreeLevels, leaves, index)
+      buildFullMerkleProof(merkleTreeLevels, leaves, index, ZERO_LEAF)
     );
   })();
 
@@ -127,11 +138,11 @@ export function buildSpendInput(params: SpendParams): SpendInput {
 
   return {
     root,
+    public_amount: publicAmount,
+    ext_data_hash: extDataHash,
     nullifiers,
     output_commitments: outputCommitments,
     agg_pubkey: [aggPubkey.x, aggPubkey.y],
-    public_deposit_amount: publicDepositAmount,
-    public_withdraw_amount: publicWithdrawAmount,
     amounts: inputNotes.map(({ note }) => note.amount),
     salts: inputNotes.map(({ note }) => note.salt),
     note_indices: inputNotes.map(({ index }) => BigInt(index)),

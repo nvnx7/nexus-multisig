@@ -1,6 +1,5 @@
-export * from "./src/note.ts";
-export * from "./src/merkle.ts";
-export * from "./src/poseidon.ts";
-export * from "./src/babyjubjub.ts";
-export * from "./src/frost.ts";
-export * from "./src/spend-input.ts";
+// The cryptography now lives in the `nexus-crypto` package; re-export it so
+// existing consumers of the `circuits` barrel keep working.
+export * from "nexus-crypto";
+// Circuit-specific witness builders (coupled to the transact circuit layout).
+export * from "./src/transact-input.ts";

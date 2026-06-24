@@ -3,7 +3,7 @@ import path from "node:path";
 
 // @ts-expect-error – circom_tester is a CJS module
 import { wasm } from "circom_tester";
-import { poseidonHash } from "../src/poseidon.ts";
+import { poseidonHash } from "nexus-crypto";
 
 const CIRCUIT_PATH = path.join(__dirname, "circuits", "test_note_nullifier.circom");
 

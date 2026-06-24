@@ -1,13 +1,14 @@
 pragma circom 2.2.3;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
+include "../node_modules/circomlib/circuits/bitify.circom";
 include "./lib/schnorr_verify.circom";
 include "./merkle_proof.circom";
 include "./note_commitment.circom";
 include "./note_nullifier.circom";
 
-/// @title Spend
-/// @notice Private UTXO multisig spend circuit.
+/// @title Transact
+/// @notice Private UTXO multisig transaction circuit.
 ///
 /// Proves that a threshold group (identified by the FROST aggregate public key `agg_pubkey`)
 /// owns N input notes in the commitment Merkle tree and authorises their spend
@@ -19,14 +20,31 @@ include "./note_nullifier.circom";
 ///
 /// @param N_INPUTS  Number of input UTXOs to spend simultaneously.
 /// @param LEVELS    Depth of the shared commitment Merkle tree.
-template Spend(N_INPUTS, LEVELS) {
+template Transact(N_INPUTS, LEVELS) {
     // ── public signals ──────────────────────────────────────────────────────
+    // Declared first and in this exact order so the proof's public-input vector
+    // matches what the pool contract feeds to the on-chain Groth16 verifier:
+    //   [root, public_amount, ext_data_hash, nullifiers, output_commitments]
     signal input root;                          // Merkle tree root
+    // Net public amount used for deposits and withdrawals.
+    //   deposit:  public_amount = +amount
+    //   withdraw: public_amount = FIELD_SIZE - amount  (field-negative)
+    // The valid range of the underlying external amount is enforced on-chain by
+    // the pool contract, which derives this field element from `ext_amount`.
+    signal input public_amount;
+    // Hash of the external transaction data (recipient, ext_amount, encrypted
+    // outputs).  The pool contract recomputes this from `ext_data` and checks it
+    // equals this public input, binding the proof to those parameters.  It is
+    // folded into the signed message below so the threshold group also authorises
+    // the external data (e.g. the withdrawal recipient).
+    signal input ext_data_hash;
     signal input nullifiers[N_INPUTS];          // one per input note (prevents double-spend)
     signal input output_commitments[2];         // [recipient, change]
+
+    // ── private signals — FROST aggregate public key ─────────────────────────
+    // Identifies the threshold group that owns the input notes.  Kept private so
+    // the group's identity is not revealed on-chain.
     signal input agg_pubkey[2];                 // FROST aggregate public key (x, y)
-    signal input public_deposit_amount;         // public shielded-deposit value
-    signal input public_withdraw_amount;        // public withdrawal value
 
     // ── private signals — per input note ────────────────────────────────────
     signal input amounts[N_INPUTS];
@@ -50,19 +68,22 @@ template Spend(N_INPUTS, LEVELS) {
     // ────────────────────────────────────────────────────────────────────────
     // 1. Derive the signed message from public signals.
     //    msg = Poseidon(root, nullifiers[0..N-1], output_commitments[0,1],
-    //                   public_deposit_amount, public_withdraw_amount)
+    //                   public_amount, ext_data_hash)
     //
     //    For N_INPUTS=2: Poseidon of 7 field elements.
-    //    Signers compute the same hash off-chain before running FROST.
+    //    Signers compute the same hash off-chain before running FROST.  Folding
+    //    ext_data_hash in here both constrains that public input and binds the
+    //    signature to the external data (recipient, amounts, encrypted outputs).
     // ────────────────────────────────────────────────────────────────────────
-    component msg_hash = Poseidon(4 + N_INPUTS);
+    component msg_hash = Poseidon(5 + N_INPUTS);
     msg_hash.inputs[0] <== root;
     for (var i = 0; i < N_INPUTS; i++) {
         msg_hash.inputs[1 + i] <== nullifiers[i];
     }
     msg_hash.inputs[1 + N_INPUTS] <== output_commitments[0];
     msg_hash.inputs[2 + N_INPUTS] <== output_commitments[1];
-    msg_hash.inputs[3 + N_INPUTS] <== public_deposit_amount;
+    msg_hash.inputs[3 + N_INPUTS] <== public_amount;
+    msg_hash.inputs[4 + N_INPUTS] <== ext_data_hash;
 
     // ────────────────────────────────────────────────────────────────────────
     // 2. Verify FROST Schnorr signature against the derived message.
@@ -110,6 +131,7 @@ template Spend(N_INPUTS, LEVELS) {
     //    Output pubkeys may differ from agg_pubkey (shielded transfer).
     // ────────────────────────────────────────────────────────────────────────
     component out_commitments[2];
+    component out_amount_range[2];
     for (var j = 0; j < 2; j++) {
         out_commitments[j] = NoteCommitment();
         out_commitments[j].pubkey_x <== output_pubkeys[j][0];
@@ -117,11 +139,21 @@ template Spend(N_INPUTS, LEVELS) {
         out_commitments[j].amount   <== output_amounts[j];
         out_commitments[j].salt     <== output_salts[j];
         output_commitments[j] === out_commitments[j].commitment;
+
+        // Range-check each output amount to 248 bits.  This keeps every output
+        // (and therefore their sum) well below the field modulus so the
+        // conservation equation below cannot be satisfied via field wraparound.
+        out_amount_range[j] = Num2Bits(248);
+        out_amount_range[j].in <== output_amounts[j];
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 5. Amount conservation:
-    //    sum(input amounts) + public_deposit == sum(output amounts) + public_withdraw
+    // 5. Amount conservation (single public amount, tornado-nova style):
+    //    sum(input amounts) + public_amount == sum(output amounts)
+    //
+    //    public_amount carries deposits as a positive value and withdrawals as
+    //    a field-negative value (FIELD_SIZE - amount), so one equation covers
+    //    both directions.
     // ────────────────────────────────────────────────────────────────────────
     var sum_in = 0;
     for (var i = 0; i < N_INPUTS; i++) {
@@ -133,5 +165,5 @@ template Spend(N_INPUTS, LEVELS) {
         sum_out += output_amounts[j];
     }
 
-    sum_in + public_deposit_amount === sum_out + public_withdraw_amount;
+    sum_in + public_amount === sum_out;
 }
