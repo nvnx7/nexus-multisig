@@ -1,9 +1,6 @@
 import { scValToNative } from "@stellar/stellar-sdk";
-import { Server } from "@stellar/stellar-sdk/rpc";
-
-const RPC_URL =
-  process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ?? "https://soroban-testnet.stellar.org";
-const POOL_CONTRACT_ID = process.env.NEXT_PUBLIC_POOL_CONTRACT_ID;
+import { getRpcServer } from "@/api/rpc";
+import { POOL_CONTRACT_ID_LOCAL } from "@/config/constants";
 
 export type CommitmentRecord = {
   /** Commitment hash as decimal bigint string */
@@ -20,31 +17,41 @@ export type CommitmentRecord = {
  * Note: the Stellar RPC retains events for ~17,280 ledgers (~24h on testnet).
  * Pass a known deployment ledger as startLedger to scan from contract creation.
  */
-export async function getCommitments(startLedger = 1): Promise<CommitmentRecord[]> {
-  if (!POOL_CONTRACT_ID) throw new Error("NEXT_PUBLIC_POOL_CONTRACT_ID not configured");
+export async function getCommitments(
+  startLedger = 1,
+): Promise<CommitmentRecord[]> {
+  if (!POOL_CONTRACT_ID_LOCAL)
+    throw new Error(
+      "POOL_CONTRACT_ID not configured (see src/config/constants.ts)",
+    );
 
-  const server = new Server(RPC_URL);
+  const server = getRpcServer();
   const response = await server.getEvents({
     startLedger,
-    filters: [{ type: "contract", contractIds: [POOL_CONTRACT_ID] }],
+    filters: [{ type: "contract", contractIds: [POOL_CONTRACT_ID_LOCAL] }],
     limit: 10_000,
   });
 
   const records: CommitmentRecord[] = [];
 
   for (const ev of response.events) {
-    // NewCommitmentEvent: topic=[commitment (U256)], value={index, ...}
-    if (ev.topic.length !== 1) continue;
+    // contractevent topics: [<event-name symbol>, ...#[topic] fields].
+    // NewCommitmentEvent → [symbol("new_commitment_event"), commitment];
+    // value = { index, encrypted_output }.
+    if (ev.topic.length < 2) continue;
 
-    const data = scValToNative(ev.value) as Record<string, unknown> | null;
-    if (!data || !("index" in data)) continue;
-
+    let name: string;
     let commitment: bigint;
     try {
-      commitment = scValToNative(ev.topic[0]!) as bigint;
+      name = String(scValToNative(ev.topic[0]!));
+      commitment = scValToNative(ev.topic[1]!) as bigint;
     } catch {
       continue;
     }
+    if (name !== "new_commitment_event") continue;
+
+    const data = scValToNative(ev.value) as Record<string, unknown> | null;
+    if (!data || !("index" in data)) continue;
 
     records.push({
       commitment: commitment.toString(),

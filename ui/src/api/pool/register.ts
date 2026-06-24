@@ -1,141 +1,50 @@
-/**
- * On-chain shielded account registration.
- *
- * Builds a pool.register(account) transaction, requests a signature from the
- * Stellar wallet, and submits it.  The contract emits a PublicKeyEvent that
- * other participants can use to look up the caller's shielded keys by their
- * Stellar address.
- *
- * Must be called client-side because it needs the wallet kit for signing.
- */
+"use client";
 
-import {
-  Address,
-  Contract,
-  Networks,
-  Transaction,
-  TransactionBuilder,
-  xdr,
-} from "@stellar/stellar-sdk";
-import { Server, Api, assembleTransaction } from "@stellar/stellar-sdk/rpc";
-import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit";
-import { babyJub } from "@iden3/js-crypto";
+import { useMutation } from "@tanstack/react-query";
+import type { Account } from "bindings";
+import { getPoolClient } from "@/api/contract";
+import { getShieldedAddress } from "./getShieldedAddress";
+import type { ShieldedAddress } from "@/lib/shielded";
+import { EdwardsPoint } from "@noble/curves/abstract/edwards.js";
+import { numberToBytesBE } from "@noble/curves/utils.js";
 
-const RPC_URL =
-  process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ??
-  "https://soroban-testnet.stellar.org";
-const POOL_CONTRACT_ID = process.env.NEXT_PUBLIC_POOL_CONTRACT_ID;
-const NETWORK =
-  process.env.NEXT_PUBLIC_STELLAR_NETWORK === "mainnet"
-    ? Networks.PUBLIC
-    : Networks.TESTNET;
+// noble-curves v1.9.7 BabyJubJub: Point.toBytes() uses big-endian but places
+// the sign bit in the last byte (y's LSB), which collides with y's own bits.
+// Use BE with sign in bytes[0] (y's MSB) — safe because y < 2^254 guarantees
+// bits 6-7 of the MSB byte are always 0 and thus free.
+export function packPoint(pt: EdwardsPoint): Uint8Array {
+  const { x, y } = pt.toAffine();
+  const bytes = numberToBytesBE(y, 32);
+  if (x & 1n) bytes[0] |= 0x80; // sign of x in bit 7 of MSB byte (always free)
+  return bytes;
+}
 
-/**
- * Register the caller's shielded keys on the pool contract.
- *
- * @param stellarAddress - The connected Stellar wallet address (owner).
- * @param noteKeyX       - BabyJubJub note-key X coordinate (decimal string).
- * @param noteKeyY       - BabyJubJub note-key Y coordinate (decimal string).
- * @param viewPubKey     - X25519 encryption public key (32 bytes hex).
- */
-export async function registerOnChain(
-  stellarAddress: string,
-  noteKeyX: string,
-  noteKeyY: string,
-  viewPubKey: string,
-): Promise<void> {
-  if (!POOL_CONTRACT_ID) throw new Error("NEXT_PUBLIC_POOL_CONTRACT_ID not configured");
+export async function isRegistered(stellarAddress: string): Promise<boolean> {
+  return (await getShieldedAddress(stellarAddress)) !== null;
+}
 
-  // Compress spend key (BJJ point) to 32 bytes using iden3 pack format
-  // (y as 32-byte LE with bit 255 = sign of x)
-  const spendKeyBytes = Buffer.from(
-    babyJub.packPoint([BigInt(noteKeyX), BigInt(noteKeyY)]),
-  );
-  // View key (X25519) is already 32 bytes
-  const viewKeyBytes = hexToBuffer(viewPubKey);
+export async function registerShieldedAddress(params: {
+  owner: string;
+  shieldedAddress: ShieldedAddress;
+}): Promise<void> {
+  const { owner, shieldedAddress } = params;
+  const account: Account = {
+    owner,
+    spend_public_key: Buffer.from(packPoint(shieldedAddress.spendPubKey)),
+    view_public_key: Buffer.from(packPoint(shieldedAddress.viewPubKey)),
+  };
 
-  // Build the Account struct ScVal for pool.register(account)
-  // Keys must be in lexicographic order: owner < spend_public_key < view_public_key
-  const accountScVal = xdr.ScVal.scvMap([
-    new xdr.ScMapEntry({
-      key: xdr.ScVal.scvSymbol("owner"),
-      val: new Address(stellarAddress).toScVal(),
-    }),
-    new xdr.ScMapEntry({
-      key: xdr.ScVal.scvSymbol("spend_public_key"),
-      val: xdr.ScVal.scvBytes(spendKeyBytes),
-    }),
-    new xdr.ScMapEntry({
-      key: xdr.ScVal.scvSymbol("view_public_key"),
-      val: xdr.ScVal.scvBytes(viewKeyBytes),
-    }),
-  ]);
+  const client = getPoolClient(owner, true);
+  console.log("Tx sending");
+  const tx = await client.register({ account });
+  console.log("Tx", tx);
+  const res = await tx.signAndSend();
+  console.log("Res", res);
+}
 
-  const server = new Server(RPC_URL);
-  const contract = new Contract(POOL_CONTRACT_ID);
-  const sourceAccount = await server.getAccount(stellarAddress);
-
-  const tx = new TransactionBuilder(sourceAccount, {
-    fee: "100000",
-    networkPassphrase: NETWORK,
-  })
-    .addOperation(contract.call("register", accountScVal))
-    .setTimeout(60)
-    .build();
-
-  const sim = await server.simulateTransaction(tx);
-  if (Api.isSimulationError(sim)) {
-    throw new Error(`Simulation failed: ${sim.error}`);
-  }
-
-  const assembled = assembleTransaction(tx, sim).build();
-  const txXdr = assembled.toEnvelope().toXDR("base64");
-
-  // Sign via wallet kit (signTransaction = sign without submitting)
-  const { signedTxXdr } = await StellarWalletsKit.signTransaction(txXdr, {
-    address: stellarAddress,
-    networkPassphrase: NETWORK,
+export function useRegisterShieldedAddress() {
+  return useMutation({
+    // mutationKey: ["registerShieldedAddress"],
+    mutationFn: registerShieldedAddress,
   });
-
-  // Submit
-  const signedTx = new Transaction(
-    xdr.TransactionEnvelope.fromXDR(signedTxXdr, "base64"),
-    NETWORK,
-  );
-  const submitResult = await server.sendTransaction(signedTx);
-
-  if (submitResult.status === "ERROR") {
-    throw new Error(`Transaction failed: ${submitResult.errorResult?.toXDR("base64")}`);
-  }
-
-  // Poll until the transaction is confirmed
-  await waitForConfirmation(server, submitResult.hash);
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function hexToBuffer(hex: string): Buffer {
-  return Buffer.from(hex.startsWith("0x") ? hex.slice(2) : hex, "hex");
-}
-
-async function waitForConfirmation(
-  server: Server,
-  txHash: string,
-  maxAttempts = 20,
-  intervalMs = 1500,
-): Promise<void> {
-  for (let i = 0; i < maxAttempts; i++) {
-    await sleep(intervalMs);
-    const result = await server.getTransaction(txHash);
-    if (result.status === "SUCCESS") return;
-    if (result.status === "FAILED") {
-      throw new Error("Transaction failed on-chain");
-    }
-    // "NOT_FOUND" = still pending — keep polling
-  }
-  throw new Error("Transaction confirmation timed out");
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }

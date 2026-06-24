@@ -10,16 +10,13 @@ import {
 import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit";
 import { FreighterModule } from "@creit-tech/stellar-wallets-kit/modules/freighter";
 import { LobstrModule } from "@creit-tech/stellar-wallets-kit/modules/lobstr";
-import { Networks } from "@creit-tech/stellar-wallets-kit/types";
-import {
-  DERIVATION_MSG,
-  deriveShieldedWallet,
-  type ShieldedWallet,
-} from "@/lib/shielded";
-import { registerOnChain } from "@/api/pool/register";
-import { registerUser } from "@/api/users/registerUser";
+import { ShieldedWallet } from "@/lib/shielded";
+import { passphraseNetwork } from "@/config/env";
+import { registerShieldedAddress } from "@/api/pool/register";
+import { getShieldedAddress } from "@/api/pool/getShieldedAddress";
+import { bytesToHex, hexToBytes } from "@noble/curves/utils.js";
 
-export { type ShieldedWallet };
+const DERIVATION_MSG = "nexus:v1:derive-shielded-key";
 
 // ── Kit initialisation (lazy, browser-only) ────────────────────────────────
 
@@ -29,7 +26,7 @@ function ensureKit() {
   if (kitReady) return;
   StellarWalletsKit.init({
     modules: [new FreighterModule(), new LobstrModule()],
-    network: Networks.PUBLIC,
+    network: passphraseNetwork,
   });
   kitReady = true;
 }
@@ -37,23 +34,23 @@ function ensureKit() {
 // ── Shielded key cache ─────────────────────────────────────────────────────
 
 const STELLAR_ADDR_KEY = "nexus_stellar_addr";
-const SHIELDED_PREFIX = "nexus_shielded_v2:";
+const SHIELDED_PREFIX = "nexus_shielded_v1:";
 
 function cacheLoad(stellarAddress: string): ShieldedWallet | null {
   try {
-    const raw = localStorage.getItem(SHIELDED_PREFIX + stellarAddress);
-    if (!raw) return null;
-    const w = JSON.parse(raw) as ShieldedWallet;
-    // Require view keys — invalidate v1 cache entries that predate view-key support
-    if (!w.viewPrivKey || !w.viewPubKey) return null;
-    return w;
+    const hex = localStorage.getItem(SHIELDED_PREFIX + stellarAddress);
+    if (!hex) return null;
+    return ShieldedWallet.fromMasterKey(hexToBytes(hex));
   } catch {
     return null;
   }
 }
 
 function cacheSave(stellarAddress: string, w: ShieldedWallet): void {
-  localStorage.setItem(SHIELDED_PREFIX + stellarAddress, JSON.stringify(w));
+  localStorage.setItem(
+    SHIELDED_PREFIX + stellarAddress,
+    bytesToHex(w.masterSecret),
+  );
 }
 
 // ── Context types ──────────────────────────────────────────────────────────
@@ -112,48 +109,36 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setConnectPhase("connecting");
 
     try {
-      // 1. Wallet selection modal
+      // Wallet selection modal
       const { address } = await StellarWalletsKit.authModal();
 
-      // 2. Cache hit — already registered, restore immediately
-      const cached = cacheLoad(address);
-      if (cached) {
-        localStorage.setItem(STELLAR_ADDR_KEY, address);
-        setStellarAddress(address);
-        setShielded(cached);
-        setConnectPhase("done");
-        return;
+      // Cache hit skips signing; cache miss prompts signature to derive keys
+      let shieldedWallet = cacheLoad(address);
+      if (!shieldedWallet) {
+        setConnectPhase("signing");
+        const { signedMessage } = await StellarWalletsKit.signMessage(
+          DERIVATION_MSG,
+          { address, networkPassphrase: passphraseNetwork },
+        );
+        shieldedWallet = ShieldedWallet.fromSignature(
+          Buffer.from(signedMessage, "base64"),
+        );
       }
 
-      // 3. Cache miss → sign to derive shielded keys
-      setConnectPhase("signing");
-      const { signedMessage } = await StellarWalletsKit.signMessage(
-        DERIVATION_MSG,
-        { address },
-      );
-      const derived = deriveShieldedWallet(signedMessage);
+      // Always check on-chain — cache hit doesn't guarantee registration
+      const onchainAddr = await getShieldedAddress(address);
+      if (!onchainAddr) {
+        setConnectPhase("registering");
+        await registerShieldedAddress({
+          owner: address,
+          shieldedAddress: shieldedWallet.shieldedAddress(),
+        });
+      }
 
-      // 4. Register on-chain via pool.register() — requires wallet signing
-      setConnectPhase("registering");
-      await registerOnChain(
-        address,
-        derived.pubKeyX,
-        derived.pubKeyY,
-        derived.viewPubKey,
-      );
-
-      // 5. Mirror registration in local DB so DKG session validation works
-      await registerUser(
-        address,
-        [derived.pubKeyX, derived.pubKeyY],
-        derived.viewPubKey,
-      );
-
-      // 6. Only after successful on-chain registration, persist keys locally
-      cacheSave(address, derived);
+      cacheSave(address, shieldedWallet);
       localStorage.setItem(STELLAR_ADDR_KEY, address);
       setStellarAddress(address);
-      setShielded(derived);
+      setShielded(shieldedWallet);
       setConnectPhase("done");
     } catch (err: unknown) {
       setStellarAddress(null);

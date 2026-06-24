@@ -1,51 +1,109 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
+  Badge,
+  Box,
   Button,
-  Chip,
-  NumberField,
+  Field,
+  Flex,
+  Input,
   Separator,
   Spinner,
-  TextField,
-  Input,
-  Label,
-} from "@heroui/react";
-import { getPoolPublicKey } from "@/api/pool/getPoolPublicKey";
+  Text,
+} from "@chakra-ui/react";
+import { Minus, Plus, X } from "lucide-react";
+import { useWallet } from "@/context/wallet-context";
+import { useCreateDkgSession } from "@/api/dkg/createDkgSession";
+import { getShieldedAddress } from "@/api/pool/getShieldedAddress";
 
-export interface MemberEntry {
-  /** Stellar G… address (the user-facing identifier). */
+interface MemberEntry {
   stellarAddress: string;
-  /** BabyJubJub note-key X from pool.register() — used for DKG ECDH. */
-  noteKeyX?: string;
-  /** BabyJubJub note-key Y from pool.register() — used for DKG ECDH. */
-  noteKeyY?: string;
-  /** X25519 view-key from pool.register() — used for note encryption. */
-  encKey?: string;
-  valid: boolean;
   isSelf: boolean;
 }
 
-interface ConfigureStepProps {
-  /** Stellar G… address of the connected wallet. */
-  selfStellarAddress: string;
-  onStart: (memberStellarAddresses: string[], threshold: number) => void;
-  isStarting: boolean;
+// ── Number stepper (replacement for HeroUI NumberField) ──────────────────────
+
+interface NumberStepperProps {
+  value: number;
+  onChange: (v: number) => void;
+  min: number;
+  max: number;
 }
 
-export function ConfigureStep({
-  selfStellarAddress,
-  onStart,
-  isStarting,
-}: ConfigureStepProps) {
-  const [members, setMembers] = useState<MemberEntry[]>([
-    { stellarAddress: selfStellarAddress, valid: true, isSelf: true },
-  ]);
+function NumberStepper({ value, onChange, min, max }: NumberStepperProps) {
+  return (
+    <Flex
+      align="center"
+      borderWidth={1}
+      borderColor="border.emphasis"
+      rounded="md"
+      overflow="hidden"
+      display="inline-flex"
+      h={9}
+    >
+      <Button
+        onClick={() => onChange(Math.max(min, value - 1))}
+        disabled={value <= min}
+        px={3}
+        h="full"
+        minW={0}
+        rounded="none"
+        aria-label="Decrease"
+      >
+        <Minus size={12} />
+      </Button>
+      <Flex
+        align="center"
+        justify="center"
+        w={10}
+        h="full"
+        borderLeftWidth={1}
+        borderRightWidth={1}
+        borderColor="border.emphasis"
+        fontFamily="mono"
+        fontSize="sm"
+        fontWeight="medium"
+        color="fg.default"
+        bg="bg.default"
+      >
+        {value}
+      </Flex>
+      <Button
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+        px={3}
+        h="full"
+        minW={0}
+        rounded="none"
+        aria-label="Increase"
+      >
+        <Plus size={12} />
+      </Button>
+    </Flex>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export function ConfigureStep() {
+  const router = useRouter();
+  const { stellarAddress } = useWallet();
+
+  const [members, setMembers] = useState<MemberEntry[]>(() =>
+    stellarAddress ? [{ stellarAddress, isSelf: true }] : [],
+  );
   const [inputValue, setInputValue] = useState("");
   const [inputChecking, setInputChecking] = useState(false);
   const [inputError, setInputError] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(2);
   const inputRef = useRef<HTMLInputElement>(null);
+  const {
+    mutate: createDkgSession,
+    isPending: isStarting,
+    error: startError,
+  } = useCreateDkgSession();
 
   const addMember = async () => {
     const addr = inputValue.trim();
@@ -60,29 +118,14 @@ export function ConfigureStep({
     setInputError(null);
 
     try {
-      // Look up shielded keys from pool contract PublicKeyEvent events
-      const pubkey = await getPoolPublicKey(addr);
-      if (!pubkey) {
-        setInputError("Address not registered on pool");
-        setMembers((prev) => [
-          ...prev,
-          { stellarAddress: addr, valid: false, isSelf: false },
-        ]);
-      } else {
-        setMembers((prev) => [
-          ...prev,
-          {
-            stellarAddress: addr,
-            noteKeyX: pubkey.note_key_x,
-            noteKeyY: pubkey.note_key_y,
-            encKey: pubkey.enc_key,
-            valid: true,
-            isSelf: false,
-          },
-        ]);
-        setInputValue("");
-        setTimeout(() => inputRef.current?.focus(), 0);
+      const shieldedAddress = await getShieldedAddress(addr);
+      if (!shieldedAddress) {
+        setInputError("No registered shielded wallet found for this address");
+        return;
       }
+      setMembers((prev) => [...prev, { stellarAddress: addr, isSelf: false }]);
+      setInputValue("");
+      setTimeout(() => inputRef.current?.focus(), 0);
     } catch {
       setInputError("Failed to look up address");
     } finally {
@@ -99,152 +142,171 @@ export function ConfigureStep({
     }
   };
 
-  const validMembers = members.filter((m) => m.valid);
+  const handleSubmit = () => {
+    if (!stellarAddress) return;
+    createDkgSession(
+      { threshold, participants: members.map((m) => m.stellarAddress) },
+      { onSuccess: ({ id }) => router.push(`/vault/new/${id}`) },
+    );
+  };
+
   const canStart =
-    validMembers.length >= 2 &&
+    members.length >= 2 &&
     !isStarting &&
     threshold >= 1 &&
-    threshold <= validMembers.length;
+    threshold <= members.length;
 
   return (
-    <div className="flex flex-col gap-8">
-      {/* Members section */}
-      <div className="flex flex-col gap-4">
-        <div>
-          <h3 className="font-display text-base font-semibold text-[color:var(--foreground)]">
-            Participants
-          </h3>
-          <p className="font-sans text-xs text-[color:var(--muted)] mt-0.5">
-            Add co-signers by their Stellar address. At least 2 required.
-          </p>
-        </div>
-
-        {/* Add member input */}
-        <div className="flex gap-2">
-          <TextField
-            className="flex-1"
-            value={inputValue}
-            onChange={setInputValue}
-            onKeyDown={(e: React.KeyboardEvent) => {
-              if (e.key === "Enter") addMember();
-            }}
-            isInvalid={!!inputError}
+    <Flex direction="column" gap={8}>
+      {/* Participants */}
+      <Flex direction="column" gap={4}>
+        <Box>
+          <Text
+            as="h3"
+            fontFamily="heading"
+            fontSize="md"
+            fontWeight="semibold"
+            color="fg.default"
           >
+            Participants
+          </Text>
+          <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={0.5}>
+            Add co-signers by their Stellar address. At least 2 required.
+          </Text>
+        </Box>
+
+        {/* Address input row */}
+        <Field.Root invalid={!!inputError}>
+          <Flex gap={2} w="full">
             <Input
               ref={inputRef}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e: React.KeyboardEvent) => {
+                if (e.key === "Enter") addMember();
+              }}
               placeholder="Stellar address (G…)"
-              className="font-mono text-xs"
+              fontFamily="mono"
+              fontSize="xs"
+              flex={1}
+              size="sm"
             />
-          </TextField>
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={addMember}
-            isDisabled={inputChecking || !inputValue.trim()}
-            className="font-sans shrink-0"
-          >
-            {inputChecking ? <Spinner size="sm" color="current" /> : "Add"}
-          </Button>
-        </div>
-
-        {inputError && (
-          <p className="font-sans text-xs text-[color:var(--danger)] -mt-2">
-            {inputError}
-          </p>
-        )}
+            <Button
+              size="sm"
+              onClick={addMember}
+              disabled={inputChecking || !inputValue.trim()}
+              flexShrink={0}
+              h={9}
+            >
+              {inputChecking ? <Spinner as="span" size="sm" color="brand.solid" /> : "Add"}
+            </Button>
+          </Flex>
+          {inputError && (
+            <Field.ErrorText fontFamily="body" fontSize="xs">
+              {inputError}
+            </Field.ErrorText>
+          )}
+        </Field.Root>
 
         {/* Member list */}
-        <div className="flex flex-col gap-1.5">
+        <Flex direction="column" gap={1.5}>
           {members.map((m) => (
-            <div
+            <Flex
               key={m.stellarAddress}
-              className="flex items-center gap-3 py-2.5 px-3 rounded-[var(--radius)] bg-[color:var(--surface-secondary)]"
+              align="center"
+              gap={3}
+              py={2.5}
+              px={3}
+              rounded="md"
+            // bg="bg.subtle"
             >
-              <span className="font-mono text-xs text-[color:var(--foreground)] truncate flex-1 min-w-0">
+              <Text
+                fontFamily="mono"
+                fontSize="xs"
+                color="fg.default"
+                truncate
+                flex={1}
+                minW={0}
+              >
                 {m.stellarAddress}
-              </span>
-              <div className="flex items-center gap-2 shrink-0">
+              </Text>
+              <Flex align="center" gap={2} flexShrink={0}>
                 {m.isSelf && (
-                  <Chip size="sm" variant="soft">
-                    <Chip.Label>You</Chip.Label>
-                  </Chip>
-                )}
-                {!m.isSelf && !m.valid && (
-                  <Chip size="sm" color="danger" variant="soft">
-                    <Chip.Label>Not registered</Chip.Label>
-                  </Chip>
+                  <Badge
+                    variant="subtle"
+                    colorPalette="green"
+                    fontFamily="mono"
+                    fontSize="2xs"
+                  >
+                    You
+                  </Badge>
                 )}
                 {!m.isSelf && (
-                  <button
-                    type="button"
+                  <Button
+                    size="xs"
                     onClick={() => removeMember(m.stellarAddress)}
-                    className="text-[color:var(--muted)] hover:text-[color:var(--danger)] transition-colors text-base leading-none"
+                    _hover={{ color: "status.danger", bg: "status.dangerBg" }}
                     aria-label="Remove member"
+                    minW={0}
                   >
-                    ×
-                  </button>
+                    <X size={14} />
+                  </Button>
                 )}
-              </div>
-            </div>
+              </Flex>
+            </Flex>
           ))}
-        </div>
-      </div>
+        </Flex>
+      </Flex>
 
-      <Separator />
+      <Separator borderColor="border.subtle" />
 
-      {/* Threshold section */}
-      <div className="flex flex-col gap-4">
-        <div>
-          <h3 className="font-display text-base font-semibold text-[color:var(--foreground)]">
+      {/* Threshold */}
+      <Flex direction="column" gap={4}>
+        <Box>
+          <Text
+            as="h3"
+            fontFamily="heading"
+            fontSize="md"
+            fontWeight="semibold"
+            color="fg.default"
+          >
             Signing threshold
-          </h3>
-          <p className="font-sans text-xs text-[color:var(--muted)] mt-0.5">
+          </Text>
+          <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={0.5}>
             Minimum signatures required to authorize a transaction.
-          </p>
-        </div>
+          </Text>
+        </Box>
 
-        <div className="flex items-center gap-3">
-          <span className="font-sans text-sm text-[color:var(--muted)] shrink-0">
+        <Flex align="center" gap={3}>
+          <Text fontFamily="body" fontSize="sm" color="fg.muted" flexShrink={0}>
             Require
-          </span>
-          <NumberField
+          </Text>
+          <NumberStepper
             value={threshold}
             onChange={setThreshold}
-            minValue={1}
-            maxValue={validMembers.length || 1}
-            className="w-28"
-          >
-            <Label className="sr-only">Threshold</Label>
-            <NumberField.Group>
-              <NumberField.DecrementButton className="px-2 py-1 font-mono">
-                −
-              </NumberField.DecrementButton>
-              <NumberField.Input className="text-center font-mono text-sm w-10" />
-              <NumberField.IncrementButton className="px-2 py-1 font-mono">
-                +
-              </NumberField.IncrementButton>
-            </NumberField.Group>
-          </NumberField>
-          <span className="font-sans text-sm text-[color:var(--muted)]">
-            of {validMembers.length} signer{validMembers.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-      </div>
+            min={1}
+            max={members.length || 1}
+          />
+          <Text fontFamily="body" fontSize="sm" color="fg.muted">
+            of {members.length} signer{members.length !== 1 ? "s" : ""}
+          </Text>
+        </Flex>
+      </Flex>
+
+      {startError && (
+        <Text fontFamily="body" fontSize="xs" color="status.danger">
+          {startError.message ?? "Failed to create session"}
+        </Text>
+      )}
 
       <Button
-        variant="primary"
-        isDisabled={!canStart}
-        onPress={() =>
-          onStart(
-            validMembers.map((m) => m.stellarAddress),
-            threshold,
-          )
-        }
-        className="font-sans font-medium gap-2 mt-2"
+        disabled={!canStart}
+        onClick={handleSubmit}
+        mt={2}
       >
-        {isStarting ? <Spinner size="sm" color="current" /> : null}
-        {isStarting ? "Starting…" : "Create Vault"}
+        {isStarting ? <Spinner as="span" size="sm" color="white" /> : null}
+        {isStarting ? "Creating…" : "Create Vault"}
       </Button>
-    </div>
+    </Flex>
   );
 }

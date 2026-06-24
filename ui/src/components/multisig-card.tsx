@@ -1,38 +1,55 @@
 "use client";
 
-import { Card, Chip } from "@heroui/react";
+import { Badge, Box, Flex, Text } from "@chakra-ui/react";
+import { useRouter } from "next/navigation";
 
 export interface MultisigGroup {
   id: string;
   threshold: number;
   total: number;
   agg_address: string;
-  status: string;
   created_at: number;
 }
 
 export function MultisigCard({ group }: { group: MultisigGroup }) {
+  const router = useRouter();
   const short = `${group.agg_address.slice(0, 10)}…${group.agg_address.slice(-8)}`;
-  const isActive = group.status === "active";
 
   return (
-    <Card
-      variant="default"
-      className="cursor-pointer hover:bg-[color:var(--surface-secondary)] transition-colors"
+    <Box
+      borderWidth={1}
+      borderColor="border.default"
+      rounded="md"
+      bg="bg.default"
+      cursor="pointer"
+      transition="background-color 0.15s"
+      _hover={{ bg: "bg.subtle", boxShadow: "shadow.hover" }}
+      onClick={() => router.push(`/vault/${group.agg_address}`)}
     >
-      <Card.Content className="flex flex-row items-center justify-between gap-4 px-4 py-3">
-        <div className="flex flex-col gap-0.5 min-w-0">
-          <span className="font-mono text-xs text-[color:var(--foreground)] truncate">{short}</span>
-          <span className="font-sans text-xs text-[color:var(--muted)]">
+      <Flex align="center" justify="space-between" gap={4} px={4} py={3}>
+        <Flex direction="column" gap={0.5} minW={0} flex={1}>
+          <Text
+            fontFamily="mono"
+            fontSize="xs"
+            color="fg.default"
+            truncate
+          >
+            {short}
+          </Text>
+          <Text fontFamily="body" fontSize="xs" color="fg.muted">
             {group.threshold} of {group.total} · requires {group.threshold} signatures
-          </span>
-        </div>
-        <Chip color={isActive ? "success" : "warning"} variant="soft" size="sm">
-          <Chip.Label className="font-mono text-[10px] tracking-wide">
-            {group.status}
-          </Chip.Label>
-        </Chip>
-      </Card.Content>
-    </Card>
+          </Text>
+        </Flex>
+        <Badge
+          variant="subtle"
+          colorPalette="green"
+          fontFamily="mono"
+          fontSize="2xs"
+          flexShrink={0}
+        >
+          {group.threshold}-of-{group.total}
+        </Badge>
+      </Flex>
+    </Box>
   );
 }

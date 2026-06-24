@@ -1,23 +1,16 @@
 import {
   Account,
   Contract,
-  Networks,
   TransactionBuilder,
   scValToNative,
 } from "@stellar/stellar-sdk";
-import { Server, Api } from "@stellar/stellar-sdk/rpc";
-
-const RPC_URL =
-  process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ?? "https://soroban-testnet.stellar.org";
-const POOL_CONTRACT_ID = process.env.NEXT_PUBLIC_POOL_CONTRACT_ID;
-const NETWORK =
-  process.env.NEXT_PUBLIC_STELLAR_NETWORK === "mainnet"
-    ? Networks.PUBLIC
-    : Networks.TESTNET;
-
-// A well-known testnet address used only as the simulation source account.
-// The account does not need to exist — simulation doesn't validate sequence.
-const DUMMY_SOURCE = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
+import { Api } from "@stellar/stellar-sdk/rpc";
+import { getRpcServer } from "@/api/rpc";
+import { passphraseNetwork } from "@/config/env";
+import {
+  POOL_CONTRACT_ID_LOCAL,
+  DUMMY_SOURCE_ACCOUNT,
+} from "@/config/constants";
 
 export type PoolState = {
   root: string;
@@ -28,15 +21,18 @@ export type PoolState = {
  * directly against the Stellar RPC (no server route).
  */
 export async function getPoolState(): Promise<PoolState> {
-  if (!POOL_CONTRACT_ID) throw new Error("NEXT_PUBLIC_POOL_CONTRACT_ID not configured");
+  if (!POOL_CONTRACT_ID_LOCAL)
+    throw new Error(
+      "POOL_CONTRACT_ID not configured (see src/config/constants.ts)",
+    );
 
-  const server = new Server(RPC_URL);
-  const contract = new Contract(POOL_CONTRACT_ID);
-  const source = new Account(DUMMY_SOURCE, "0");
+  const server = getRpcServer();
+  const contract = new Contract(POOL_CONTRACT_ID_LOCAL);
+  const source = new Account(DUMMY_SOURCE_ACCOUNT, "0");
 
   const tx = new TransactionBuilder(source, {
     fee: "100",
-    networkPassphrase: NETWORK,
+    networkPassphrase: passphraseNetwork,
   })
     .addOperation(contract.call("get_root"))
     .setTimeout(30)

@@ -1,29 +1,38 @@
 "use client";
 
+import {
+  Box,
+  Button,
+  Flex,
+  Separator,
+  Spinner,
+  Text,
+} from "@chakra-ui/react";
 import { useWallet } from "@/context/wallet-context";
-import { Button, Separator, Spinner } from "@heroui/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MultisigCard, type MultisigGroup } from "./multisig-card";
+import { SessionList } from "./session-list";
+import { getGroups } from "@/api/groups/getGroups";
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function AddressRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function AddressRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="font-sans text-[10px] uppercase tracking-widest text-[color:var(--muted)]">
+    <Flex direction="column" gap={0.5}>
+      <Text
+        fontFamily="body"
+        fontSize="2xs"
+        textTransform="uppercase"
+        letterSpacing="widest"
+        color="fg.muted"
+      >
         {label}
-      </span>
-      <span className="font-mono text-xs text-[color:var(--foreground)] break-all">
+      </Text>
+      <Text fontFamily="mono" fontSize="xs" color="fg.default" wordBreak="break-all">
         {value}
-      </span>
-    </div>
+      </Text>
+    </Flex>
   );
 }
 
@@ -40,40 +49,58 @@ function ConnectedHeader({
   const shortShielded = `${shieldedAddress.slice(0, 14)}…${shieldedAddress.slice(-10)}`;
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-3 min-w-0 flex-1">
+    <Flex direction="column" gap={3}>
+      <Flex align="flex-start" justify="space-between" gap={4}>
+        <Flex direction="column" gap={3} minW={0} flex={1}>
           <AddressRow label="Stellar Wallet" value={shortStellar} />
           <AddressRow label="Shielded Identity" value={shortShielded} />
-        </div>
+        </Flex>
         <Button
-          variant="ghost"
           size="sm"
-          onPress={onDisconnect}
-          className="font-sans text-xs text-[color:var(--muted)] shrink-0"
+          onClick={onDisconnect}
+          flexShrink={0}
         >
           Disconnect
         </Button>
-      </div>
-    </div>
+      </Flex>
+    </Flex>
   );
 }
 
 function EmptyVaults() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center py-16">
-      <span
-        className="font-mono text-4xl text-[color:var(--border)] select-none"
+    <Flex
+      flex={1}
+      direction="column"
+      align="center"
+      justify="center"
+      gap={3}
+      textAlign="center"
+      py={16}
+    >
+      <Text
+        fontFamily="mono"
+        fontSize="4xl"
+        color="border.default"
         aria-hidden="true"
+        userSelect="none"
       >
         ✦
-      </span>
-      <p className="font-sans text-sm text-[color:var(--muted)]">No vaults yet</p>
-      <p className="font-sans text-xs text-[color:var(--muted)] max-w-[22rem] leading-relaxed">
+      </Text>
+      <Text fontFamily="body" fontSize="sm" color="fg.muted">
+        No vaults yet
+      </Text>
+      <Text
+        fontFamily="body"
+        fontSize="xs"
+        color="fg.muted"
+        maxW="22rem"
+        lineHeight="relaxed"
+      >
         Create a new vault or ask a group member to add your shielded address to
         an existing one.
-      </p>
-    </div>
+      </Text>
+    </Flex>
   );
 }
 
@@ -85,97 +112,152 @@ export function WalletPanel() {
     useWallet();
   const isConnecting = connectPhase !== "idle" && connectPhase !== "done";
 
+  const shieldedAddress = useMemo(
+    () => (shielded ? shielded.shieldedAddress().address.toString() : null),
+    [shielded],
+  );
+
   const [groups, setGroups] = useState<MultisigGroup[]>([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
 
   useEffect(() => {
-    if (!shielded?.address) {
+    if (!stellarAddress) {
       setGroups([]);
       return;
     }
     setLoadingGroups(true);
-    fetch(`/api/groups?member_address=${shielded.address}`)
-      .then((r) => r.json())
-      .then((data) => setGroups(data.groups ?? []))
+    getGroups({ address: stellarAddress })
+      .then((data) => setGroups(data))
       .catch(() => setGroups([]))
       .finally(() => setLoadingGroups(false));
-  }, [shielded?.address]);
+  }, [stellarAddress]);
 
   // ── Disconnected ────────────────────────────────────────────────────────
 
-  if (!stellarAddress || !shielded) {
+  if (!stellarAddress || !shielded || !shieldedAddress) {
     return (
-      <section className="flex flex-col items-center justify-center w-1/2 h-full bg-[color:var(--surface)] px-16 gap-6">
-        <div className="flex flex-col items-center gap-2 text-center">
-          <h2 className="font-display text-2xl font-semibold text-[color:var(--foreground)]">
+      <Box
+        as="section"
+        display="flex"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
+        w="50%"
+        h="full"
+        bg="bg.default"
+        px={16}
+        gap={6}
+      >
+        <Flex direction="column" align="center" gap={2} textAlign="center">
+          <Text
+            as="h2"
+            fontFamily="heading"
+            fontSize="2xl"
+            fontWeight="semibold"
+            color="fg.default"
+          >
             Welcome back
-          </h2>
-          <p className="font-sans text-sm text-[color:var(--muted)] max-w-xs leading-relaxed">
+          </Text>
+          <Text
+            fontFamily="body"
+            fontSize="sm"
+            color="fg.muted"
+            maxW="xs"
+            lineHeight="relaxed"
+          >
             Connect your Stellar wallet. You&apos;ll sign one message to derive
             your private shielded identity.
-          </p>
-        </div>
+          </Text>
+        </Flex>
 
         <Button
-          variant="primary"
           size="lg"
-          isDisabled={isConnecting}
-          onPress={connect}
-          className="font-sans font-medium px-10 gap-2"
+          disabled={isConnecting}
+          onClick={connect}
+          px={10}
         >
-          {isConnecting ? <Spinner size="sm" color="current" /> : null}
-          {connectPhase === "signing" ? "Sign to derive keys…"
-            : connectPhase === "registering" ? "Registering on-chain…"
-            : isConnecting ? "Connecting…"
-            : "Connect Wallet"}
+          {isConnecting ? <Spinner as="span" size="sm" color="white" /> : null}
+          {connectPhase === "signing"
+            ? "Sign to derive keys…"
+            : connectPhase === "registering"
+              ? "Registering on-chain…"
+              : isConnecting
+                ? "Connecting…"
+                : "Connect Wallet"}
         </Button>
 
         {connectError && (
-          <p className="font-sans text-xs text-[color:var(--danger)] max-w-xs text-center leading-relaxed">
+          <Text
+            fontFamily="body"
+            fontSize="xs"
+            color="status.danger"
+            maxW="xs"
+            textAlign="center"
+            lineHeight="relaxed"
+          >
             {connectError}
-          </p>
+          </Text>
         )}
-      </section>
+      </Box>
     );
   }
 
   // ── Connected ───────────────────────────────────────────────────────────
 
   return (
-    <section className="flex flex-col w-1/2 h-full bg-[color:var(--surface)] px-12 py-10 gap-6">
+    <Box
+      as="section"
+      display="flex"
+      flexDirection="column"
+      w="50%"
+      h="full"
+      bg="bg.default"
+      px={12}
+      py={10}
+      gap={6}
+      overflowY="auto"
+    >
       <ConnectedHeader
         stellarAddress={stellarAddress}
-        shieldedAddress={shielded.address}
+        shieldedAddress={shieldedAddress}
         onDisconnect={disconnect}
       />
 
-      <Separator />
+      <Separator borderColor="border.subtle" />
 
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-xl font-semibold text-[color:var(--foreground)]">
+      <SessionList />
+
+      <Separator borderColor="border.subtle" />
+
+      <Flex align="center" justify="space-between">
+        <Text
+          as="h2"
+          fontFamily="heading"
+          fontSize="xl"
+          fontWeight="semibold"
+          color="fg.default"
+        >
           My Vaults
-        </h2>
+        </Text>
         <Button
-          variant="outline"
           size="sm"
-          className="font-sans text-sm"
-          onPress={() => router.push("/vault/new")}
+          onClick={() => router.push("/vault/new")}
         >
           + New Vault
         </Button>
-      </div>
+      </Flex>
 
-      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto gap-2">
+      <Flex direction="column" flex={1} minH={0} gap={2}>
         {loadingGroups ? (
-          <div className="flex flex-1 items-center justify-center py-16">
-            <Spinner size="sm" />
-          </div>
+          <Flex flex={1} align="center" justify="center" py={16}>
+            <Spinner size="sm" color="brand.solid" />
+          </Flex>
         ) : groups.length === 0 ? (
           <EmptyVaults />
         ) : (
           groups.map((g) => <MultisigCard key={g.id} group={g} />)
         )}
-      </div>
-    </section>
+      </Flex>
+    </Box>
   );
 }

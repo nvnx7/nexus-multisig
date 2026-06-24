@@ -1,5 +1,5 @@
 /**
- * Client-side spend proof generation and pool.transact() transaction builder.
+ * Client-side transaction proof generation and pool.transact() builder.
  *
  * Flow:
  *   1. Generate Groth16 proof with snarkjs using artifacts in /public/
@@ -9,56 +9,57 @@
 
 // snarkjs ships no .d.ts — import as any
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { groth16 } = require("snarkjs") as { groth16: {
-  fullProve(input: Record<string, unknown>, wasmPath: string, zkeyPath: string): Promise<{
-    proof: { pi_a: string[]; pi_b: string[][]; pi_c: string[] };
-    publicSignals: string[];
-  }>;
-} };
+const { groth16 } = require("snarkjs") as {
+  groth16: {
+    fullProve(
+      input: Record<string, unknown>,
+      wasmPath: string,
+      zkeyPath: string,
+    ): Promise<{
+      proof: { pi_a: string[]; pi_b: string[][]; pi_c: string[] };
+      publicSignals: string[];
+    }>;
+  };
+};
 
-import {
-  Address,
-  Contract,
-  Networks,
-  TransactionBuilder,
-  xdr,
-} from "@stellar/stellar-sdk";
-import { Server, Api, assembleTransaction } from "@stellar/stellar-sdk/rpc";
-
-const RPC_URL =
-  process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ??
-  "https://soroban-testnet.stellar.org";
-const POOL_CONTRACT_ID = process.env.NEXT_PUBLIC_POOL_CONTRACT_ID!;
-const NETWORK =
-  process.env.NEXT_PUBLIC_STELLAR_NETWORK === "mainnet"
-    ? Networks.PUBLIC
-    : Networks.TESTNET;
+import { Address, xdr } from "@stellar/stellar-sdk";
+import { keccak_256 } from "@noble/hashes/sha3.js";
+import type { Proof, ExtData as ContractExtData } from "bindings";
+import { getPoolClient } from "@/api/contract";
+import { BN254_FIELD } from "@/config/constants";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type SpendInput = {
+/**
+ * Witness for the Transact circuit. Field names and shapes mirror the circuit's
+ * input signals exactly (see circuits/src/transact-input.ts) — this object is
+ * passed straight to snarkjs `groth16.fullProve`, so any mismatch produces an
+ * invalid witness. It must contain exactly the circuit inputs and nothing else.
+ */
+export type TransactInput = {
+  // public — same order the pool contract feeds the on-chain verifier:
+  //   [root, public_amount, ext_data_hash, nullifiers, output_commitments]
   root: bigint;
+  public_amount: bigint;
+  /** Field element = keccak256(xdr(ext_data)) mod BN254 scalar field. */
+  ext_data_hash: bigint;
   nullifiers: bigint[];
   output_commitments: bigint[];
-  public_amount: bigint;
-  /** Hex-encoded 32-byte hash */
-  ext_data_hash: string;
-  asp_membership_root: bigint;
-  asp_non_membership_root: bigint;
-  // private circuit inputs (consumed only by snarkjs, not sent on-chain)
-  input_amounts: bigint[];
-  input_pubkeys: { x: bigint; y: bigint }[];
-  input_salts: bigint[];
-  output_amounts: bigint[];
-  output_pubkeys: { x: bigint; y: bigint }[];
-  output_salts: bigint[];
+  // private — FROST aggregate public key (x, y)
+  agg_pubkey: [bigint, bigint];
+  // private — per input note
+  amounts: bigint[];
+  salts: bigint[];
+  note_indices: bigint[];
   path_elements: bigint[][];
   path_indices: bigint[][];
-  sig_R8x: bigint;
-  sig_R8y: bigint;
-  sig_e: bigint;
+  // private — output notes (2 outputs); output_pubkeys[j] = [x, y]
+  output_pubkeys: [[bigint, bigint], [bigint, bigint]];
+  output_amounts: bigint[];
+  output_salts: bigint[];
+  // private — FROST Schnorr signature
   sig_s: bigint;
-  agg_pubkey: { x: bigint; y: bigint };
+  sig_e: bigint;
 };
 
 export type ExtData = {
@@ -95,10 +96,10 @@ function encodeG1(pt: string[]): Buffer {
  */
 function encodeG2(pt: string[][]): Buffer {
   const buf = new Uint8Array(128);
-  writeBE32(BigInt(pt[0]![1]!), buf, 0);   // x imaginary (c1)
-  writeBE32(BigInt(pt[0]![0]!), buf, 32);  // x real      (c0)
-  writeBE32(BigInt(pt[1]![1]!), buf, 64);  // y imaginary (c1)
-  writeBE32(BigInt(pt[1]![0]!), buf, 96);  // y real      (c0)
+  writeBE32(BigInt(pt[0]![1]!), buf, 0); // x imaginary (c1)
+  writeBE32(BigInt(pt[0]![0]!), buf, 32); // x real      (c0)
+  writeBE32(BigInt(pt[1]![1]!), buf, 64); // y imaginary (c1)
+  writeBE32(BigInt(pt[1]![0]!), buf, 96); // y real      (c0)
   return Buffer.from(buf);
 }
 
@@ -106,18 +107,6 @@ function encodeG2(pt: string[][]): Buffer {
 
 function u64(n: bigint): xdr.Uint64 {
   return xdr.Uint64.fromString(n.toString());
-}
-
-function u256ScVal(n: bigint): xdr.ScVal {
-  const hex = n.toString(16).padStart(64, "0");
-  return xdr.ScVal.scvU256(
-    new xdr.UInt256Parts({
-      hiHi: u64(BigInt("0x" + hex.slice(0, 16))),
-      hiLo: u64(BigInt("0x" + hex.slice(16, 32))),
-      loHi: u64(BigInt("0x" + hex.slice(32, 48))),
-      loLo: u64(BigInt("0x" + hex.slice(48, 64))),
-    }),
-  );
 }
 
 function i256ScVal(n: bigint): xdr.ScVal {
@@ -141,34 +130,79 @@ function bytesScVal(buf: Buffer): xdr.ScVal {
   return xdr.ScVal.scvBytes(buf);
 }
 
+// Soroban contracttype structs are ScVal maps whose entries MUST be sorted by
+// key (symbols compared bytewise). Sort here so callers can list fields in any
+// order and the host still accepts the map and produces matching XDR.
 function structScVal(fields: [string, xdr.ScVal][]): xdr.ScVal {
+  const sorted = [...fields].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return xdr.ScVal.scvMap(
-    fields.map(
+    sorted.map(
       ([key, val]) =>
         new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol(key), val }),
     ),
   );
 }
 
-function vecScVal(items: xdr.ScVal[]): xdr.ScVal {
-  return xdr.ScVal.scvVec(items);
+/** Encode a field element as a 32-byte big-endian buffer. */
+function field32(n: bigint): Buffer {
+  const buf = new Uint8Array(32);
+  writeBE32(n, buf, 0);
+  return Buffer.from(buf);
+}
+
+/** Build the canonical ScVal map for ExtData (sorted keys; matches the contract). */
+function buildExtDataScVal(extData: ExtData): xdr.ScVal {
+  return structScVal([
+    ["recipient", new Address(extData.recipient).toScVal()],
+    ["ext_amount", i256ScVal(extData.ext_amount)],
+    ["encrypted_output0", bytesScVal(hexToBuffer(extData.encrypted_output0))],
+    ["encrypted_output1", bytesScVal(hexToBuffer(extData.encrypted_output1))],
+  ]);
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Generate a Groth16 spend proof and build an unsigned pool.transact() transaction.
+ * Compute `ext_data_hash` exactly as the pool contract does:
+ *   keccak256(xdr(ext_data)) reduced modulo the BN254 scalar field.
+ *
+ * Call this BEFORE running FROST: the result is folded into the signed message
+ * (see deriveTransactMsg) and becomes the `ext_data_hash` public input of the
+ * proof, so the threshold group authorises the external data (e.g. the
+ * withdrawal recipient).
+ */
+export function computeExtDataHash(extData: ExtData): bigint {
+  const payload = buildExtDataScVal(extData).toXDR(); // canonical XDR bytes
+  const digest = keccak_256(payload); // Uint8Array(32)
+  let n = 0n;
+  for (const b of digest) n = (n << 8n) | BigInt(b);
+  return n % BN254_FIELD;
+}
+
+/**
+ * Generate a Groth16 transaction proof and build an unsigned pool.transact() call.
  *
  * @param senderAddress - Stellar address of the sender (must authorize the TX)
- * @param input         - Spend witness (public + private circuit inputs)
+ * @param input         - Transact witness (public + private circuit inputs)
  * @param extData       - On-chain data (recipient, amounts, encrypted outputs)
  * @returns Assembled transaction XDR; sign with wallet kit, then submit
  */
 export async function buildTransactTx(
   senderAddress: string,
-  input: SpendInput,
+  input: TransactInput,
   extData: ExtData,
 ): Promise<string> {
+  // 0. Recompute ext_data_hash from extData and confirm it matches the value
+  //    baked into the witness (and therefore the FROST signature). A mismatch
+  //    means the witness was signed over different external data — the proof
+  //    would fail on-chain, so fail fast with a clear error instead.
+  const extDataHash = computeExtDataHash(extData);
+  if (extDataHash !== input.ext_data_hash) {
+    throw new Error(
+      "ext_data_hash mismatch: witness/signature do not match the provided extData",
+    );
+  }
+
   // 1. Generate ZK proof from circuit artifacts in /public/
   const { proof } = await groth16.fullProve(
     input as unknown as Record<string, unknown>,
@@ -176,59 +210,40 @@ export async function buildTransactTx(
     "/main.zkey",
   );
 
-  // 2. Encode proof: A(G1, 64B) || B(G2, 128B) || C(G1, 64B)
-  const piA = encodeG1(proof.pi_a);
-  const piB = encodeG2(proof.pi_b);
-  const piC = encodeG1(proof.pi_c);
+  // 2. Assemble the typed contract arguments. The bindings encode these to XDR
+  //    (matching the contract's struct layout); we only encode the Groth16
+  //    proof points (A: G1 64B, B: G2 128B, C: G1 64B) and the field elements.
+  const proofArg: Proof = {
+    proof: {
+      a: encodeG1(proof.pi_a),
+      b: encodeG2(proof.pi_b),
+      c: encodeG1(proof.pi_c),
+    },
+    root: input.root,
+    input_nullifiers: input.nullifiers,
+    output_commitment0: input.output_commitments[0]!,
+    output_commitment1: input.output_commitments[1]!,
+    public_amount: input.public_amount,
+    // 32-byte big-endian of the reduced field element (matches the contract).
+    ext_data_hash: field32(extDataHash),
+  };
 
-  // 3. Build XDR args for pool.transact(proof, ext_data, sender)
-  const groth16ProofScVal = structScVal([
-    ["a", bytesScVal(piA)],
-    ["b", bytesScVal(piB)],
-    ["c", bytesScVal(piC)],
-  ]);
+  const extDataArg: ContractExtData = {
+    recipient: extData.recipient,
+    ext_amount: extData.ext_amount,
+    encrypted_output0: hexToBuffer(extData.encrypted_output0),
+    encrypted_output1: hexToBuffer(extData.encrypted_output1),
+  };
 
-  const proofScVal = structScVal([
-    ["proof", groth16ProofScVal],
-    ["root", u256ScVal(input.root)],
-    ["input_nullifiers", vecScVal(input.nullifiers.map(u256ScVal))],
-    ["output_commitment0", u256ScVal(input.output_commitments[0]!)],
-    ["output_commitment1", u256ScVal(input.output_commitments[1]!)],
-    ["public_amount", u256ScVal(input.public_amount)],
-    ["ext_data_hash", bytesScVal(hexToBuffer(input.ext_data_hash))],
-    ["asp_membership_root", u256ScVal(input.asp_membership_root)],
-    ["asp_non_membership_root", u256ScVal(input.asp_non_membership_root)],
-  ]);
-
-  const extDataScVal = structScVal([
-    ["recipient", new Address(extData.recipient).toScVal()],
-    ["ext_amount", i256ScVal(extData.ext_amount)],
-    ["encrypted_output0", bytesScVal(hexToBuffer(extData.encrypted_output0))],
-    ["encrypted_output1", bytesScVal(hexToBuffer(extData.encrypted_output1))],
-  ]);
-
-  const senderScVal = new Address(senderAddress).toScVal();
-
-  // 4. Build transaction, simulate to obtain the read/write footprint, assemble
-  const server = new Server(RPC_URL);
-  const contract = new Contract(POOL_CONTRACT_ID);
-  const sourceAccount = await server.getAccount(senderAddress);
-
-  const tx = new TransactionBuilder(sourceAccount, {
-    fee: "100000",
-    networkPassphrase: NETWORK,
-  })
-    .addOperation(contract.call("transact", proofScVal, extDataScVal, senderScVal))
-    .setTimeout(60)
-    .build();
-
-  const sim = await server.simulateTransaction(tx);
-  if (Api.isSimulationError(sim)) {
-    throw new Error(`Simulation failed: ${sim.error}`);
-  }
-
-  // 5. Assemble with footprint — returns unsigned transaction XDR
-  return assembleTransaction(tx, sim).build().toEnvelope().toXDR("base64");
+  // 3. Build + simulate via the bindings client. Return the assembled (prepared)
+  //    XDR so the caller can sign it with the wallet and submit (see useTransact).
+  const client = getPoolClient(senderAddress);
+  const assembled = await client.transact({
+    proof: proofArg,
+    ext_data: extDataArg,
+    sender: senderAddress,
+  });
+  return assembled.toXDR();
 }
 
 // ── Utility ──────────────────────────────────────────────────────────────────

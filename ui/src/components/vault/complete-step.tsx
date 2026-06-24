@@ -1,78 +1,116 @@
 "use client";
 
-import { Button } from "@heroui/react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Box, Button, Flex, Spinner, Text } from "@chakra-ui/react";
+import { CheckCircle2 } from "lucide-react";
+import { getGroup, type GroupDetail } from "@/api/groups/getGroup";
 
-interface CompleteStepProps {
-  groupAddress: string;
-  threshold: number;
-  total: number;
-}
-
-export function CompleteStep({ groupAddress, threshold, total }: CompleteStepProps) {
+export function CompleteStep({ groupId }: { groupId: string }) {
   const router = useRouter();
-  const shortAddr = `${groupAddress.slice(0, 18)}…${groupAddress.slice(-14)}`;
+  const [group, setGroup] = useState<GroupDetail | null>(null);
+
+  useEffect(() => {
+    getGroup(groupId).then(setGroup).catch(() => {});
+  }, [groupId]);
+
+  if (!group) {
+    return (
+      <Flex align="center" justify="center" py={12}>
+        <Spinner size="sm" color="brand.solid" />
+      </Flex>
+    );
+  }
+
+  const shortAddr = `${group.agg_address.slice(0, 18)}…${group.agg_address.slice(-14)}`;
 
   return (
-    <div className="flex flex-col items-center gap-8 py-4">
-      {/* Icon */}
-      <div className="w-16 h-16 rounded-full bg-[#0d4732]/10 flex items-center justify-center">
-        <svg
-          width="32"
-          height="32"
-          viewBox="0 0 32 32"
-          fill="none"
-          aria-hidden="true"
+    <Flex direction="column" align="center" gap={8} py={4}>
+      {/* Success icon */}
+      <Flex
+        w={16}
+        h={16}
+        rounded="full"
+        bg="status.successBg"
+        align="center"
+        justify="center"
+      >
+        <Box color="status.success">
+          <CheckCircle2 size={32} />
+        </Box>
+      </Flex>
+
+      {/* Title + description */}
+      <Flex direction="column" align="center" gap={2} textAlign="center">
+        <Text
+          as="h3"
+          fontFamily="heading"
+          fontSize="xl"
+          fontWeight="semibold"
+          color="fg.default"
         >
-          <path
-            d="M6 16.5L12 22.5L26 9"
-            stroke="#0d4732"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-
-      {/* Text */}
-      <div className="text-center flex flex-col gap-2">
-        <h3 className="font-display text-xl font-semibold text-[color:var(--foreground)]">
           Vault created
-        </h3>
-        <p className="font-sans text-sm text-[color:var(--muted)] max-w-xs leading-relaxed">
-          Your {threshold}-of-{total} multisig vault is ready. All participants
-          can now co-sign transactions.
-        </p>
-      </div>
+        </Text>
+        <Text
+          fontFamily="body"
+          fontSize="sm"
+          color="fg.muted"
+          maxW="xs"
+          lineHeight="relaxed"
+        >
+          Your {group.threshold}-of-{group.total} multisig vault is ready. All
+          participants can now co-sign transactions.
+        </Text>
+      </Flex>
 
-      {/* Vault details */}
-      <div className="w-full flex flex-col gap-3 p-4 rounded-[var(--radius)] bg-[color:var(--surface-secondary)]">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-sans text-[10px] uppercase tracking-widest text-[color:var(--muted)]">
+      {/* Vault details card */}
+      <Flex
+        direction="column"
+        w="full"
+        gap={3}
+        p={4}
+        rounded="md"
+        bg="bg.subtle"
+        borderWidth={1}
+        borderColor="border.default"
+      >
+        <Flex direction="column" gap={0.5}>
+          <Text
+            fontFamily="body"
+            fontSize="2xs"
+            textTransform="uppercase"
+            letterSpacing="widest"
+            color="fg.muted"
+          >
             Vault address
-          </span>
-          <span className="font-mono text-xs text-[color:var(--foreground)] break-all">
+          </Text>
+          <Text fontFamily="mono" fontSize="xs" color="fg.default" wordBreak="break-all">
             {shortAddr}
-          </span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="font-sans text-[10px] uppercase tracking-widest text-[color:var(--muted)]">
+          </Text>
+        </Flex>
+        <Flex direction="column" gap={0.5}>
+          <Text
+            fontFamily="body"
+            fontSize="2xs"
+            textTransform="uppercase"
+            letterSpacing="widest"
+            color="fg.muted"
+          >
             Policy
-          </span>
-          <span className="font-mono text-xs text-[color:var(--foreground)]">
-            {threshold} of {total} signatures
-          </span>
-        </div>
-      </div>
+          </Text>
+          <Text fontFamily="mono" fontSize="xs" color="fg.default">
+            {group.threshold} of {group.total} signatures
+          </Text>
+        </Flex>
+      </Flex>
 
-      {/* Actions */}
+      {/* CTA */}
       <Button
-        variant="primary"
-        className="w-full font-sans font-medium"
-        onPress={() => router.push("/")}
+        w="full"
+        onClick={() => router.push("/")}
       >
         Back to Home
       </Button>
-    </div>
+    </Flex>
   );
 }

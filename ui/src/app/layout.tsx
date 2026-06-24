@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { Providers } from "./providers";
+import { Header } from "@/components/layout/header";
+import { Footer } from "@/components/layout/footer";
+import Script from "next/script";
 
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -35,8 +39,17 @@ export default function RootLayout({
       className={`${ibmPlexSans.variable} ${inter.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
-      <body className="min-h-screen bg-background font-sans antialiased">
-        {children}
+      <body>
+        <Providers>
+          <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
+            <Header />
+            <div style={{ height: "calc(100vh - 6.5rem)", display: "flex", flexDirection: "column" }}>
+              {children}
+            </div>
+            <Footer />
+          </div>
+        </Providers>
+        <Script src="/snarkjs.js" strategy="lazyOnload" />
       </body>
     </html>
   );

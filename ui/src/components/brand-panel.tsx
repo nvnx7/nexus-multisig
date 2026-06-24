@@ -1,11 +1,13 @@
-function StellarMark({ className }: { className?: string }) {
+import { Box, Flex, Text } from "@chakra-ui/react";
+
+function StellarMark({ ...props }: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
       viewBox="0 0 32 32"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={className}
       aria-hidden="true"
+      {...props}
     >
       <line x1="16" y1="2" x2="16" y2="30" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
       <line x1="2" y1="16" x2="30" y2="16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
@@ -18,37 +20,77 @@ function StellarMark({ className }: { className?: string }) {
 
 function StatPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col items-center gap-1">
-      <span className="font-mono text-[10px] tracking-widest uppercase text-[#7eb59a]">{label}</span>
-      <span className="font-mono text-xs font-medium text-white">{value}</span>
-    </div>
+    <Flex direction="column" align="center" gap={1}>
+      <Text
+        fontFamily="mono"
+        fontSize="2xs"
+        letterSpacing="widest"
+        textTransform="uppercase"
+        color="brand.text"
+      >
+        {label}
+      </Text>
+      <Text fontFamily="mono" fontSize="xs" fontWeight="medium" color="white">
+        {value}
+      </Text>
+    </Flex>
   );
 }
 
 export function BrandPanel() {
   return (
-    <section className="flex flex-col justify-center items-center w-1/2 h-full bg-[#002f1f] px-16 gap-10 shrink-0">
-      <div className="flex flex-col items-center gap-6 text-center">
-        <div className="w-14 h-14 text-[#9bd3b6]">
-          <StellarMark className="w-full h-full" />
-        </div>
+    <Box
+      as="section"
+      display="flex"
+      flexDirection="column"
+      justifyContent="center"
+      alignItems="center"
+      w="50%"
+      h="full"
+      bg="brand.emphasis"
+      px={16}
+      gap={10}
+      flexShrink={0}
+    >
+      <Flex direction="column" align="center" gap={6} textAlign="center">
+        <Box w={14} h={14} color="brand.inverseText">
+          <StellarMark width="100%" height="100%" />
+        </Box>
 
-        <div className="flex flex-col gap-3">
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-white">
+        <Flex direction="column" gap={3}>
+          <Text
+            as="h1"
+            fontFamily="heading"
+            fontSize="4xl"
+            fontWeight="semibold"
+            letterSpacing="tighter"
+            color="white"
+          >
             Nexus
-          </h1>
-          <p className="font-sans text-sm leading-relaxed text-[#7eb59a] max-w-[22rem]">
+          </Text>
+          <Text
+            fontFamily="body"
+            fontSize="sm"
+            lineHeight="relaxed"
+            color="brand.text"
+            maxW="22rem"
+          >
             Institutional-grade threshold signature wallets. Private by design,
             cryptographically verifiable, fully non-custodial.
-          </p>
-        </div>
-      </div>
+          </Text>
+        </Flex>
+      </Flex>
 
-      <div className="flex gap-8 border-t border-[#19503a] pt-8">
+      <Flex
+        gap={8}
+        borderTopWidth={1}
+        borderColor="brand.muted"
+        pt={8}
+      >
         <StatPill label="Signature scheme" value="FROST" />
         <StatPill label="Privacy layer" value="ZK Proofs" />
         <StatPill label="Curve" value="BabyJubJub" />
-      </div>
-    </section>
+      </Flex>
+    </Box>
   );
 }
