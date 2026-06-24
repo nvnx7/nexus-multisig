@@ -1,7 +1,6 @@
 //! Privacy Pool Contract
 //!
-//! This contract implements a privacy-preserving transaction pool with embedded
-//! policy (membership and non-membership in an association set).
+//! This contract implements a privacy-preserving transaction pool.
 //! It enables users to deposit, transfer, and withdraw
 //! tokens while maintaining transaction privacy through zero-knowledge proofs.
 //!
@@ -15,7 +14,7 @@
 #![allow(clippy::too_many_arguments)]
 use crate::error::Error;
 use crate::event::{NewCommitmentEvent, NewNullifierEvent, PublicKeyEvent};
-use crate::interface::{ASPMembershipClient, ASPNonMembershipClient, CircomGroth16VerifierClient};
+use crate::interface::CircomGroth16VerifierClient;
 use crate::merkle_tree::MerkleTreeWithHistory;
 use crate::storage::DataKey;
 use crate::types::{hash_ext_data, Account, ExtData, Proof};
@@ -46,8 +45,6 @@ impl PoolContract {
     /// * `admin` - Address of the contract administrator
     /// * `token` - Address of the token contract for deposits/withdrawals
     /// * `verifier` - Address of the ZK proof verifier contract
-    /// * `asp_membership` - Address of the ASP Membership contract
-    /// * `asp_non_membership` - Address of the ASP Non-Membership contract
     /// * `maximum_deposit_amount` - Maximum allowed deposit per transaction
     /// * `levels` - Number of levels in the commitment Merkle tree (1-32)
     ///
@@ -60,8 +57,6 @@ impl PoolContract {
         admin: Address,
         token: Address,
         verifier: Address,
-        asp_membership: Address,
-        asp_non_membership: Address,
         maximum_deposit_amount: U256,
         levels: u32,
     ) -> Result<(), Error> {
@@ -70,12 +65,6 @@ impl PoolContract {
         env.storage()
             .persistent()
             .set(&DataKey::Verifier, &verifier);
-        env.storage()
-            .persistent()
-            .set(&DataKey::ASPMembership, &asp_membership);
-        env.storage()
-            .persistent()
-            .set(&DataKey::ASPNonMembership, &asp_non_membership);
         env.storage()
             .persistent()
             .set(&DataKey::MaximumDepositAmount, &maximum_deposit_amount);
@@ -205,8 +194,6 @@ impl PoolContract {
         }
         Self::validate_bn256_public_input(&proof.output_commitment0, modulus)?;
         Self::validate_bn256_public_input(&proof.output_commitment1, modulus)?;
-        Self::validate_bn256_public_input(&proof.asp_membership_root, modulus)?;
-        Self::validate_bn256_public_input(&proof.asp_non_membership_root, modulus)?;
 
         Ok(())
     }
@@ -230,9 +217,9 @@ impl PoolContract {
         let client = CircomGroth16VerifierClient::new(env, &verifier);
         Self::validate_bn256_public_inputs(proof, &bn256_modulus(env))?;
 
-        // Public inputs must match the order declared by the policy circuit:
+        // Public inputs must match the order declared by the spend circuit:
         // [root, public_amount, ext_data_hash, input_nullifiers,
-        // output_commitments, membership_roots, non_membership_roots]
+        // output_commitments]
         let mut public_inputs: Vec<Bn254Fr> = Vec::new(env);
         public_inputs.push_back(Bn254Fr::from_bytes(Self::u256_to_bytes(env, &proof.root)));
         public_inputs.push_back(Bn254Fr::from_bytes(Self::u256_to_bytes(
@@ -251,18 +238,6 @@ impl PoolContract {
             env,
             &proof.output_commitment1,
         )));
-        for _ in 0..proof.input_nullifiers.len() {
-            public_inputs.push_back(Bn254Fr::from_bytes(Self::u256_to_bytes(
-                env,
-                &proof.asp_membership_root,
-            )));
-        }
-        for _ in 0..proof.input_nullifiers.len() {
-            public_inputs.push_back(Bn254Fr::from_bytes(Self::u256_to_bytes(
-                env,
-                &proof.asp_non_membership_root,
-            )));
-        }
 
         let is_valid = client.verify(&proof.proof, &public_inputs);
 
@@ -374,15 +349,6 @@ impl PoolContract {
             return Err(Error::WrongExtAmount);
         }
 
-        // ASP root validation
-        let member_root = Self::get_asp_membership_root(env)?;
-        let non_member_root = Self::get_asp_non_membership_root(env)?;
-        if member_root != proof.asp_membership_root
-            || non_member_root != proof.asp_non_membership_root
-        {
-            return Err(Error::InvalidProof);
-        }
-
         // 5. ZK proof verification
         if !Self::verify_proof(env, &proof)? {
             return Err(Error::InvalidProof);
@@ -478,82 +444,5 @@ impl PoolContract {
         }
         soroban_utils::update_admin(&env, &DataKey::Admin, &new_admin);
         Ok(())
-    }
-
-    // ========== ASP Contract Functions ==========
-
-    /// Update the ASP Membership contract address
-    ///
-    /// Changes the ASP Membership contract address. Requires admin
-    /// authorization.
-    ///
-    /// # Arguments
-    ///
-    /// * `env` - The Soroban environment
-    /// * `new_asp_membership` - New ASP Membership contract address
-    pub fn update_asp_membership(env: &Env, new_asp_membership: Address) -> Result<(), Error> {
-        let admin = Self::get_admin(env)?;
-        admin.require_auth();
-        env.storage()
-            .persistent()
-            .set(&DataKey::ASPMembership, &new_asp_membership);
-        Ok(())
-    }
-
-    /// Update the ASP Non-Membership contract address
-    ///
-    /// Changes the ASP Non-Membership contract address. Requires admin
-    /// authorization.
-    ///
-    /// # Arguments
-    ///
-    /// * `env` - The Soroban environment
-    /// * `new_asp_non_membership` - New ASP Non-Membership contract address
-    pub fn update_asp_non_membership(
-        env: &Env,
-        new_asp_non_membership: Address,
-    ) -> Result<(), Error> {
-        let admin = Self::get_admin(env)?;
-        admin.require_auth();
-        env.storage()
-            .persistent()
-            .set(&DataKey::ASPNonMembership, &new_asp_non_membership);
-        Ok(())
-    }
-
-    /// Get the current Merkle root from the ASP Membership contract
-    ///
-    /// Makes a cross-contract call to retrieve the current root of the
-    /// membership Merkle tree.
-    ///
-    /// # Arguments
-    ///
-    /// * `env` - The Soroban environment
-    ///
-    /// # Returns
-    ///
-    /// The current membership Merkle root as U256
-    pub fn get_asp_membership_root(env: &Env) -> Result<U256, Error> {
-        let asp_address = Self::get_asp_membership(env)?;
-        let client = ASPMembershipClient::new(env, &asp_address);
-        Ok(client.get_root())
-    }
-
-    /// Get the current Merkle root from the ASP Non-Membership contract
-    ///
-    /// Makes a cross-contract call to retrieve the current root of the
-    /// non-membership Sparse Merkle tree.
-    ///
-    /// # Arguments
-    ///
-    /// * `env` - The Soroban environment
-    ///
-    /// # Returns
-    ///
-    /// The current non-membership Merkle root as U256
-    pub fn get_asp_non_membership_root(env: &Env) -> Result<U256, Error> {
-        let asp_address = Self::get_asp_non_membership(env)?;
-        let client = ASPNonMembershipClient::new(env, &asp_address);
-        Ok(client.get_root())
     }
 }

@@ -16,10 +16,6 @@ pub(crate) enum DataKey {
     MaximumDepositAmount,
     /// Map of spent nullifiers (nullifier -> bool)
     Nullifiers,
-    /// Address of the ASP Membership contract
-    ASPMembership,
-    /// Address of the ASP Non-Membership contract
-    ASPNonMembership,
 }
 
 impl PoolContract {
@@ -52,27 +48,6 @@ impl PoolContract {
         env.storage()
             .persistent()
             .get(&DataKey::Verifier)
-            .ok_or(Error::NotInitialized)
-    }
-
-    pub(crate) fn get_admin(env: &Env) -> Result<Address, Error> {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Admin)
-            .ok_or(Error::NotInitialized)
-    }
-
-    pub(crate) fn get_asp_membership(env: &Env) -> Result<Address, Error> {
-        env.storage()
-            .persistent()
-            .get(&DataKey::ASPMembership)
-            .ok_or(Error::NotInitialized)
-    }
-
-    pub(crate) fn get_asp_non_membership(env: &Env) -> Result<Address, Error> {
-        env.storage()
-            .persistent()
-            .get(&DataKey::ASPNonMembership)
             .ok_or(Error::NotInitialized)
     }
 }

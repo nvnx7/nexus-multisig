@@ -22,10 +22,6 @@ pub struct Proof {
     pub public_amount: U256,
     /// Hash of the external data (binds proof to transaction parameters)
     pub ext_data_hash: BytesN<32>,
-    /// Merkle root the policy membership proof was generated against
-    pub asp_membership_root: U256,
-    /// Merkle root the policy NON-membership proof was generated against
-    pub asp_non_membership_root: U256,
 }
 
 /// External data for a transaction
@@ -56,8 +52,7 @@ pub struct ExtData {
 pub struct Account {
     /// Owner address of the account
     pub owner: Address,
-    /// BabyJubJub spend public key, compressed (iden3 pack format: 32 bytes LE
-    /// with bit 255 = sign of x). Used for creating note commitments in the ZK circuit.
+    /// BabyJubJub spend public key, compressed (32 bytes).
     pub spend_public_key: BytesN<32>,
     /// X25519 view public key for ECDH-encrypting note data (32 bytes).
     pub view_public_key: BytesN<32>,

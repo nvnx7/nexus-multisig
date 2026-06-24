@@ -4,8 +4,8 @@
 //! for privacy-preserving transactions. It uses the Poseidon hash function
 //! for ZK-circuit compatibility.
 //!
-//! - Maintains a ring buffer of recent roots for membership proof verification
-//! - Compatible with the ASP membership Merkle tree implementation
+//! - Maintains a ring buffer of recent roots so proofs generated against a
+//!   recent root remain valid for a window after new commitments are inserted
 //!
 //! This module is designed to be used internally by the pool contract.
 //! Authorization should be handled by the calling main contract before invoking
@@ -28,10 +28,9 @@ pub enum MerkleDataKey {
     CurrentRootIndex,
     /// Next available index for leaf insertion
     NextIndex,
-    /// Subtree hashes at each level (indexed by level)
+    /// Subtree hashes at each level (indexed by level). Only written once a
+    /// left child is filled at that level; absent ⇒ still the zero hash.
     FilledSubtree(u32),
-    /// Zero hash values for each level (indexed by level)
-    Zeroes(u32),
     /// Historical roots ring buffer
     Root(u32),
 }
@@ -69,15 +68,12 @@ impl MerkleTreeWithHistory {
         // Store levels
         storage.set(&MerkleDataKey::Levels, &levels);
 
-        // Initialize with precomputed zero hashes
+        // filledSubtrees[i] and the per-level zero hashes are implicitly
+        // get_zeroes()[i] until a leaf is inserted, so we don't persist them
+        // here. Writing one entry per level would blow past the per-transaction
+        // ledger-write limit (50) for deep trees; insert() falls back to
+        // get_zeroes() when a FilledSubtree entry is absent.
         let zeros: Vec<U256> = get_zeroes(env);
-
-        // Initialize filledSubtrees[i] = zeros(i) for each level
-        for i in 0..=levels {
-            let z: U256 = zeros.get(i).ok_or(Error::NotInitialized)?;
-            storage.set(&MerkleDataKey::FilledSubtree(i), &z);
-            storage.set(&MerkleDataKey::Zeroes(i), &z);
-        }
 
         // Set initial root to zero hash at top level
         let root_0: U256 = zeros.get(levels).ok_or(Error::NotInitialized)?;
@@ -139,22 +135,25 @@ impl MerkleTreeWithHistory {
         // leaves)
         let mut current_index = next_index >> 1;
 
+        // Per-level zero hashes (hardcoded constants; never persisted).
+        let zeros: Vec<U256> = get_zeroes(env);
+
         // Update the tree by recomputing hashes along the path to root
         // Start at level 1 since current_hash is already the parent of the two leaves
         for lvl in 1..levels {
             let is_right = current_index & 1 == 1;
             if is_right {
-                // Leaf is right child, get the stored left sibling
-                let left: U256 = storage
-                    .get(&MerkleDataKey::FilledSubtree(lvl))
-                    .ok_or(Error::NotInitialized)?;
+                // Leaf is right child, get the left sibling. An absent
+                // FilledSubtree means it's still the zero hash for this level.
+                let left: U256 = match storage.get(&MerkleDataKey::FilledSubtree(lvl)) {
+                    Some(v) => v,
+                    None => zeros.get(lvl).ok_or(Error::NotInitialized)?,
+                };
                 current_hash = poseidon_compress(env, left, current_hash);
             } else {
-                // Leaf is left child, store it and pair with zero hash
+                // Leaf is left child, store it and pair with the zero hash
                 storage.set(&MerkleDataKey::FilledSubtree(lvl), &current_hash);
-                let zero_val: U256 = storage
-                    .get(&MerkleDataKey::Zeroes(lvl))
-                    .ok_or(Error::NotInitialized)?;
+                let zero_val: U256 = zeros.get(lvl).ok_or(Error::NotInitialized)?;
                 current_hash = poseidon_compress(env, current_hash, zero_val);
             }
             current_index >>= 1;
