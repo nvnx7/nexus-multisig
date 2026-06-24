@@ -19,6 +19,10 @@ ui/out/
 # Circuit compilation artifacts
 circuits/build/
 
+# Generated contract bindings — tsc output (regenerate with `bun run bindings`).
+# The package source (bindings/src) is committed; the build is not.
+bindings/dist/
+
 # ── Circuit runtime artifacts (copied to ui/public/ — must be built, not committed) ──
 ui/public/main.wasm
 ui/public/main.zkey
