@@ -2,6 +2,7 @@ pragma circom 2.2.3;
 
 include "../node_modules/circomlib/circuits/poseidon.circom";
 include "../node_modules/circomlib/circuits/bitify.circom";
+include "../node_modules/circomlib/circuits/comparators.circom";
 include "./lib/schnorr_verify.circom";
 include "./merkle_proof.circom";
 include "./note_commitment.circom";
@@ -99,11 +100,16 @@ template Transact(N_INPUTS, LEVELS) {
 
     // ────────────────────────────────────────────────────────────────────────
     // 3. For each input note: commitment -> nullifier -> Merkle inclusion.
-    //    All inputs must belong to the same tree root.
+    //    A dummy input (amount == 0) is skipped from the Merkle check, letting
+    //    callers pad to N_INPUTS when spending fewer real notes (e.g. deposits).
+    //    Its nullifier stays bound to its commitment, so dummies must use a
+    //    random salt to keep nullifiers unique across transactions.
     // ────────────────────────────────────────────────────────────────────────
     component in_commitments[N_INPUTS];
     component nullifier_checks[N_INPUTS];
     component merkle_proofs[N_INPUTS];
+    component is_dummy[N_INPUTS];
+    component root_checks[N_INPUTS];
 
     for (var i = 0; i < N_INPUTS; i++) {
         in_commitments[i] = NoteCommitment();
@@ -123,7 +129,15 @@ template Transact(N_INPUTS, LEVELS) {
             merkle_proofs[i].path_elements[j] <== path_elements[i][j];
             merkle_proofs[i].path_indices[j]  <== path_indices[i][j];
         }
-        root === merkle_proofs[i].root;
+
+        // Enforce root only for real notes (amount != 0).
+        is_dummy[i] = IsZero();
+        is_dummy[i].in <== amounts[i];
+
+        root_checks[i] = ForceEqualIfEnabled();
+        root_checks[i].enabled <== 1 - is_dummy[i].out;
+        root_checks[i].in[0] <== root;
+        root_checks[i].in[1] <== merkle_proofs[i].root;
     }
 
     // ────────────────────────────────────────────────────────────────────────

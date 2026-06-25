@@ -109,6 +109,33 @@ describe("Transact", () => {
     await expect(circuit.calculateWitness(input)).rejects.toThrow();
   });
 
+  // ── Dummy inputs (amount == 0) ─────────────────────────────────────────────
+
+  test("dummy input skips its Merkle check (garbage path still passes)", async () => {
+    // Spend a single real note (1000) padded with a dummy (amount 0).
+    const input = buildValidInput({
+      amount0: 1000n,
+      amount1: 0n,
+      outAmount0: 700n,
+      outAmount1: 300n,
+    });
+    // Garble the dummy's Merkle path — the check is disabled for amount 0.
+    input.path_elements[1] = input.path_elements[1]!.map(() => 99999999n);
+    const witness = await circuit.calculateWitness(input);
+    await circuit.checkConstraints(witness);
+  });
+
+  test("dummy input still binds its nullifier", async () => {
+    const input = buildValidInput({
+      amount0: 1000n,
+      amount1: 0n,
+      outAmount0: 700n,
+      outAmount1: 300n,
+    });
+    input.nullifiers = [input.nullifiers[0]!, input.nullifiers[1]! + 1n];
+    await expect(circuit.calculateWitness(input)).rejects.toThrow();
+  });
+
   test("transact circuit works with real DKG and FROST signature", async () => {
     // Real 2-of-3 DKG, then drive the shared input builder with a FROST signer.
     const { aliceKey, bobKey } = await setupDKG();
