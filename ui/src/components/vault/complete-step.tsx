@@ -22,7 +22,7 @@ export function CompleteStep({ groupId }: { groupId: string }) {
     );
   }
 
-  const shortAddr = `${group.agg_address.slice(0, 18)}…${group.agg_address.slice(-14)}`;
+  const shortAddr = `${group.group_address.slice(0, 18)}…${group.group_address.slice(-14)}`;
 
   return (
     <Flex direction="column" align="center" gap={8} py={4}>

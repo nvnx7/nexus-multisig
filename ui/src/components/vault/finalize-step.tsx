@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, Button, Flex, Spinner, Text } from "@chakra-ui/react";
 import { AlertCircle, CheckCircle } from "lucide-react";
 import { babyjubjub } from "@noble/curves/misc.js";
@@ -8,13 +8,11 @@ import { hexToBytes } from "@noble/curves/utils.js";
 import { useWallet } from "@/context/wallet-context";
 import { useGetDkgSession } from "@/api/dkg/getDkgSession";
 import { useCreateGroup } from "@/api/groups/createGroup";
-import {
-  dkgRound3,
-  serializeDkgRound3,
-  deserializeDkgRound1,
-  deserializeDkgRound2,
-  bjj_FROST,
-} from "nexus-crypto";
+import { getShieldedAddress } from "@/api/pool/getShieldedAddress";
+import { encryptGvkFor, generateGroupViewKey } from "@/lib/groupViewKey";
+import { computeMyFrostKey } from "@/lib/dkg";
+import { saveFrostKey } from "@/lib/frostKeyStore";
+import { bjj_FROST } from "nexus-crypto";
 import { CompleteStep } from "./complete-step";
 
 interface FinalizeStepProps {
@@ -22,8 +20,12 @@ interface FinalizeStepProps {
 }
 
 export function FinalizeStep({ sessionId }: FinalizeStepProps) {
-  const { stellarAddress } = useWallet();
-  const { data: session, isLoading: sessionLoading, error: sessionError } = useGetDkgSession({
+  const { stellarAddress, shielded } = useWallet();
+  const {
+    data: session,
+    isLoading: sessionLoading,
+    error: sessionError,
+  } = useGetDkgSession({
     sessionId,
     poll: true,
   });
@@ -38,39 +40,39 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
     }
   }, [session?.group_id]);
 
-  const handleFinalize = () => {
-    if (!session || !stellarAddress) return;
+  // Persist this member's DKG key as soon as the session completes, so any
+  // member (not just the one who registers the group) can sign later.
+  const savedKeyRef = useRef(false);
+  useEffect(() => {
+    if (savedKeyRef.current || !session || !stellarAddress) return;
+    if (session.status !== "complete" || !session.round1_data[stellarAddress]) return;
+    try {
+      const { key, groupAddress } = computeMyFrostKey(
+        session.round1_data,
+        session.round2_data,
+        stellarAddress,
+      );
+      saveFrostKey(groupAddress, stellarAddress, key);
+      savedKeyRef.current = true;
+    } catch {
+      // round2 data not fully available yet
+    }
+  }, [session, stellarAddress]);
+
+  const handleFinalize = async () => {
+    if (!session || !stellarAddress || !shielded) return;
     try {
       setError(null);
-      const myRound1Secret = deserializeDkgRound1(session.round1_data[stellarAddress]).secret;
-      
-      const othersRound1Public = Object.entries(session.round1_data)
-        .filter(([addr]) => addr !== stellarAddress)
-        .map(([_, r1]) => deserializeDkgRound1(r1 as any).public);
-
-      const myId = bjj_FROST.Identifier.derive(stellarAddress);
-
-      const othersRound2Public = Object.entries(session.round2_data)
-        .filter(([addr]) => addr !== stellarAddress)
-        .map(([addr, r2]) => {
-          const deserializedR2 = deserializeDkgRound2(r2 as any);
-          const share = deserializedR2[myId];
-          if (!share) {
-            throw new Error(`Missing DKG Round 2 share from ${addr} for my identifier`);
-          }
-          return share;
-        });
-
-      const round3Result = serializeDkgRound3(
-        dkgRound3({
-          myRound1Secret,
-          othersRound1Public,
-          othersRound2Public,
-        }),
+      const { key, groupAddress } = computeMyFrostKey(
+        session.round1_data,
+        session.round2_data,
+        stellarAddress,
       );
+      saveFrostKey(groupAddress, stellarAddress, key);
 
-      const groupPubKeyBytes = hexToBytes(round3Result.public.commitments[0]);
-      const groupPubKeyPoint = babyjubjub.Point.fromBytes(groupPubKeyBytes).toAffine();
+      const groupPubKeyPoint = babyjubjub.Point.fromBytes(
+        hexToBytes(key.public.commitments[0]),
+      ).toAffine();
       const agg_pubkey: [string, string] = [
         groupPubKeyPoint.x.toString(),
         groupPubKeyPoint.y.toString(),
@@ -78,9 +80,11 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
 
       const members = session.participants.map((p) => {
         const id = bjj_FROST.Identifier.derive(p.address);
-        const shareHex = round3Result.public.verifyingShares[id];
+        const shareHex = key.public.verifyingShares[id];
         if (shareHex) {
-          const pt = babyjubjub.Point.fromBytes(hexToBytes(shareHex)).toAffine();
+          const pt = babyjubjub.Point.fromBytes(
+            hexToBytes(shareHex),
+          ).toAffine();
           return {
             address: p.address,
             pubkey: [pt.x.toString(), pt.y.toString()] as [string, string],
@@ -92,15 +96,39 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
         };
       });
 
+      // Generate the common view key and encrypt it to each member's personal
+      // view key, so any member can later decrypt it from the group record.
+      const gvk = generateGroupViewKey();
+      const encryptedViewKeys: Record<string, string> = {};
+      for (const p of session.participants) {
+        const viewPubKey =
+          p.address === stellarAddress
+            ? shielded.shieldedAddress().viewPubKey
+            : (await getShieldedAddress(p.address))?.viewPubKey;
+        if (!viewPubKey) {
+          throw new Error(
+            `Member ${p.address} has not registered a shielded address`,
+          );
+        }
+        encryptedViewKeys[p.address] = encryptGvkFor(gvk, {
+          x: viewPubKey.x,
+          y: viewPubKey.y,
+        });
+      }
+
       createGroupMutation.mutate({
         threshold: session.threshold,
         members,
         agg_pubkey,
+        group_address: groupAddress,
+        group_view_key: encryptedViewKeys,
         dkg_session_id: sessionId,
       });
     } catch (err) {
       console.error("Error finalizing DKG round 3:", err);
-      setError(err instanceof Error ? err.message : "DKG Round 3 computation failed");
+      setError(
+        err instanceof Error ? err.message : "DKG Round 3 computation failed",
+      );
     }
   };
 
@@ -114,7 +142,13 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
 
   if (sessionError || !session) {
     return (
-      <Flex direction="column" align="center" gap={4} py={12} textAlign="center">
+      <Flex
+        direction="column"
+        align="center"
+        gap={4}
+        py={12}
+        textAlign="center"
+      >
         <Box color="status.danger">
           <AlertCircle size={28} />
         </Box>
@@ -148,11 +182,25 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
               <CheckCircle size={22} />
             </Box>
             <Box>
-              <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
+              <Text
+                fontFamily="heading"
+                fontSize="md"
+                fontWeight="semibold"
+                color="fg.default"
+              >
                 Finalize & register vault
               </Text>
-              <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
-                All rounds are complete. Perform the final threshold key checks and register the multisig vault.
+              <Text
+                fontFamily="body"
+                fontSize="xs"
+                color="fg.muted"
+                mt={1}
+                maxW="sm"
+                mx="auto"
+                lineHeight="relaxed"
+              >
+                All rounds are complete. Perform the final threshold key checks
+                and register the multisig vault.
               </Text>
             </Box>
             <Button
@@ -173,11 +221,25 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
           <>
             <Spinner size="lg" color="brand.solid" />
             <Box>
-              <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
+              <Text
+                fontFamily="heading"
+                fontSize="md"
+                fontWeight="semibold"
+                color="fg.default"
+              >
                 Registering vault…
               </Text>
-              <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
-                Generating group public key, deriving verifying shares, and registering the vault group details.
+              <Text
+                fontFamily="body"
+                fontSize="xs"
+                color="fg.muted"
+                mt={1}
+                maxW="sm"
+                mx="auto"
+                lineHeight="relaxed"
+              >
+                Generating group public key, deriving verifying shares, and
+                registering the vault group details.
               </Text>
             </Box>
           </>

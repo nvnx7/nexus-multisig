@@ -10,10 +10,10 @@ import {
 } from "@chakra-ui/react";
 import { useWallet } from "@/context/wallet-context";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { MultisigCard, type MultisigGroup } from "./multisig-card";
+import { useMemo } from "react";
+import { MultisigCard } from "./multisig-card";
 import { SessionList } from "./session-list";
-import { getGroups } from "@/api/groups/getGroups";
+import { useGetGroups } from "@/api/groups/getGroups";
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
@@ -117,20 +117,9 @@ export function WalletPanel() {
     [shielded],
   );
 
-  const [groups, setGroups] = useState<MultisigGroup[]>([]);
-  const [loadingGroups, setLoadingGroups] = useState(false);
-
-  useEffect(() => {
-    if (!stellarAddress) {
-      setGroups([]);
-      return;
-    }
-    setLoadingGroups(true);
-    getGroups({ address: stellarAddress })
-      .then((data) => setGroups(data))
-      .catch(() => setGroups([]))
-      .finally(() => setLoadingGroups(false));
-  }, [stellarAddress]);
+  const { data: groups = [], isLoading: loadingGroups } = useGetGroups({
+    address: stellarAddress ?? undefined,
+  });
 
   // ── Disconnected ────────────────────────────────────────────────────────
 

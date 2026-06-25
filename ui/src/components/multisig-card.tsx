@@ -7,13 +7,13 @@ export interface MultisigGroup {
   id: string;
   threshold: number;
   total: number;
-  agg_address: string;
+  group_address: string;
   created_at: number;
 }
 
 export function MultisigCard({ group }: { group: MultisigGroup }) {
   const router = useRouter();
-  const short = `${group.agg_address.slice(0, 10)}…${group.agg_address.slice(-8)}`;
+  const short = `${group.group_address.slice(0, 10)}…${group.group_address.slice(-8)}`;
 
   return (
     <Box
@@ -24,7 +24,7 @@ export function MultisigCard({ group }: { group: MultisigGroup }) {
       cursor="pointer"
       transition="background-color 0.15s"
       _hover={{ bg: "bg.subtle", boxShadow: "shadow.hover" }}
-      onClick={() => router.push(`/vault/${group.agg_address}`)}
+      onClick={() => router.push(`/vault/${group.group_address}`)}
     >
       <Flex align="center" justify="space-between" gap={4} px={4} py={3}>
         <Flex direction="column" gap={0.5} minW={0} flex={1}>

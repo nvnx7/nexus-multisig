@@ -5,12 +5,15 @@ export async function createGroup(params: {
   threshold: number;
   members: { address: string; pubkey: [string, string] }[];
   agg_pubkey: [string, string];
+  /** Vault address = compressed aggregate public key (hex). */
+  group_address: string;
   enc_pubkey?: [string, string];
+  group_view_key?: Record<string, string>;
   dkg_session_id?: string;
-}): Promise<{ id: string; agg_address: string }> {
+}): Promise<{ id: string; group_address: string }> {
   const { data } = await coordinatorClient.post<{
     id: string;
-    agg_address: string;
+    group_address: string;
   }>("groups", params);
   return data;
 }
