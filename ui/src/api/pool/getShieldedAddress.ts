@@ -6,16 +6,8 @@ import { babyjubjub as bbj } from "@noble/curves/misc.js";
 import { useQuery } from "@tanstack/react-query";
 import { EdwardsPoint } from "@noble/curves/abstract/edwards.js";
 
-// Inverse of serializeBjjPoint in register.ts: reads BE-encoded y with the
-// sign of x in bit 7 of bytes[0] (the MSB byte), then feeds LE bytes into
-// noble-curves' fromBytes() which expects that format.
 function deserializeBjjPoint(beBytes: Uint8Array): EdwardsPoint {
-  const buf = new Uint8Array(beBytes);
-  const sign = (buf[0] >> 7) & 1;
-  buf[0] &= 0x7f;
-  buf.reverse();
-  if (sign) buf[31] |= 0x80;
-  return bbj.Point.fromBytes(buf);
+  return bbj.Point.fromBytes(beBytes);
 }
 
 export async function getShieldedAddress(
