@@ -8,8 +8,11 @@ import type {
     DKG_Round2,
     DKG_Secret,
     Key,
+    Nonces,
+    NonceCommitments,
 } from "@noble/curves/abstract/frost.js";
 import { bytesToHex, hexToBytes } from "@noble/curves/utils.js";
+import type { FrostSignature } from "./signature";
 
 // ── Round 1 ────────────────────────────────────────────────────────────────
 
@@ -163,4 +166,81 @@ export function deserializeDkgRound3(data: SerializedDKGRound3): Key {
             signingShare: hexToBytes(data.secret.signingShare),
         },
     };
+}
+
+// ── Signing: nonce commitments (public) ─────────────────────────────────────
+
+export type SerializedNonceCommitments = {
+    identifier: string;
+    hiding: string;
+    binding: string;
+};
+
+export function serializeNonceCommitments(
+    c: NonceCommitments,
+): SerializedNonceCommitments {
+    return {
+        identifier: c.identifier,
+        hiding: bytesToHex(c.hiding as Uint8Array),
+        binding: bytesToHex(c.binding as Uint8Array),
+    };
+}
+
+export function deserializeNonceCommitments(
+    data: SerializedNonceCommitments,
+): NonceCommitments {
+    return {
+        identifier: data.identifier,
+        hiding: hexToBytes(data.hiding),
+        binding: hexToBytes(data.binding),
+    } as NonceCommitments;
+}
+
+// ── Signing: nonces (secret) ────────────────────────────────────────────────
+
+export type SerializedNonces = { hiding: string; binding: string };
+
+export function serializeNonces(n: Nonces): SerializedNonces {
+    return {
+        hiding: bytesToHex(n.hiding as Uint8Array),
+        binding: bytesToHex(n.binding as Uint8Array),
+    };
+}
+
+export function deserializeNonces(data: SerializedNonces): Nonces {
+    return {
+        hiding: hexToBytes(data.hiding),
+        binding: hexToBytes(data.binding),
+    } as Nonces;
+}
+
+// ── Signing: signature share + aggregate signature ──────────────────────────
+
+export type SignatureShare = { identifier: string; z: bigint };
+export type SerializedSignatureShare = { identifier: string; z: string };
+
+export function serializeSignatureShare(
+    s: SignatureShare,
+): SerializedSignatureShare {
+    return { identifier: s.identifier, z: s.z.toString() };
+}
+
+export function deserializeSignatureShare(
+    data: SerializedSignatureShare,
+): SignatureShare {
+    return { identifier: data.identifier, z: BigInt(data.z) };
+}
+
+export type SerializedFrostSignature = { s: string; e: string };
+
+export function serializeFrostSignature(
+    sig: FrostSignature,
+): SerializedFrostSignature {
+    return { s: sig.s.toString(), e: sig.e.toString() };
+}
+
+export function deserializeFrostSignature(
+    data: SerializedFrostSignature,
+): FrostSignature {
+    return { s: BigInt(data.s), e: BigInt(data.e) };
 }
