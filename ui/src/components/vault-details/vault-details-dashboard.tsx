@@ -42,6 +42,7 @@ export function VaultDetailsDashboard({ vaultAddress }: VaultDetailsDashboardPro
     isLoading: groupLoading,
     error: groupError,
     signSessions,
+    shareableAddress,
     commit,
   } = useGroupShieldedWallet(vaultAddress);
 
@@ -133,7 +134,7 @@ export function VaultDetailsDashboard({ vaultAddress }: VaultDetailsDashboardPro
   return (
     <Flex flex={1} h="full" minH="0" overflow="hidden" w="full">
       <VaultInfoPanel
-        vaultAddress={vaultAddress}
+        vaultAddress={shareableAddress ?? vaultAddress}
         balance={balance}
         threshold={threshold}
         total={total}
@@ -141,7 +142,7 @@ export function VaultDetailsDashboard({ vaultAddress }: VaultDetailsDashboardPro
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onCopyAddress={() => {
-          navigator.clipboard.writeText(vaultAddress);
+          navigator.clipboard.writeText(shareableAddress ?? vaultAddress);
           setNotification({ message: "Shielded address copied!", type: "success" });
         }}
         onBack={() => router.push("/")}

@@ -126,13 +126,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Always check on-chain — cache hit doesn't guarantee registration
+      console.log("fetching..");
+
       const onchainAddr = await getShieldedAddress(address);
+      console.log("onchainAddr", onchainAddr);
+
       if (!onchainAddr) {
+        console.log("registering...");
         setConnectPhase("registering");
         await registerShieldedAddress({
           owner: address,
           shieldedAddress: shieldedWallet.shieldedAddress(),
         });
+        console.log("registered");
       }
 
       cacheSave(address, shieldedWallet);

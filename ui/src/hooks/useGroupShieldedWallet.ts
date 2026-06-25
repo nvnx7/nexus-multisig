@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import {
+  type Point,
   deserializeDkgRound3,
   frostCommit,
   serializeNonceCommitments,
@@ -19,6 +20,10 @@ import { decryptGvk } from "@/lib/groupViewKey";
 import { encryptNonces } from "@/lib/nonceBackup";
 import { computeMyFrostKey } from "@/lib/dkg";
 import { loadFrostKey, saveFrostKey } from "@/lib/frostKeyStore";
+import {
+  composeVaultAddress,
+  deriveGroupViewPublicKey,
+} from "@/lib/vaultAddress";
 
 /**
  * Per-vault group state for whatever vault page is in view: loads the group by
@@ -71,6 +76,26 @@ export function useGroupShieldedWallet(vaultAddress: string | undefined) {
     }
   }, [cached, dkgSession, stellarAddress]);
 
+  // The two group keys + the shareable 64-byte payment address.
+  const groupSpendPublicKey = useMemo<Point | null>(
+    () =>
+      group
+        ? { x: BigInt(group.group_pubkey[0]), y: BigInt(group.group_pubkey[1]) }
+        : null,
+    [group],
+  );
+  const groupViewPublicKey = useMemo<Point | null>(
+    () => (gvk != null ? deriveGroupViewPublicKey(gvk) : null),
+    [gvk],
+  );
+  const shareableAddress = useMemo(
+    () =>
+      groupSpendPublicKey && groupViewPublicKey
+        ? composeVaultAddress(groupSpendPublicKey, groupViewPublicKey)
+        : null,
+    [groupSpendPublicKey, groupViewPublicKey],
+  );
+
   // Proposed transactions for this vault (visible to every member).
   const { data: signSessions } = useGetSignSessions(group?.group_address);
   const createSignSession = useCreateSignSession();
@@ -105,7 +130,9 @@ export function useGroupShieldedWallet(vaultAddress: string | undefined) {
     error,
     threshold: group?.threshold,
     members: group?.members,
-    aggPubkey: group?.group_pubkey,
+    groupSpendPublicKey,
+    groupViewPublicKey,
+    shareableAddress,
     gvk,
     frostSecret: frostKey?.secret ?? null,
     frostPublic: frostKey?.public ?? null,

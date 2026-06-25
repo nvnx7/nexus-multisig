@@ -1,123 +1,233 @@
-import { concatBytes, numberToBytesBE } from "@noble/ciphers/utils.js";
-import { circuitPath } from "@/config/constants";
-import type { MerkleTree } from "../tree";
-import { generateSnarkProof } from "../zk";
-import { Note } from "./note";
+import {
+  type Point,
+  type FrostSignature,
+  buildFullMerkleProof,
+  poseidonHash,
+} from "nexus-crypto";
+import { BN254_FIELD, TREE_DEPTH, ZERO_LEAF } from "@/config/constants";
+import {
+  type ExtData,
+  type TransactInput,
+  computeExtDataHash,
+} from "@/api/pool/transact";
+import type { OwnedNote } from "@/api/pool/getGroupNotes";
+import { parseVaultAddress } from "@/lib/vaultAddress";
+import {
+  type Note,
+  encryptNote,
+  noteCommitment,
+  noteNullifier,
+  randomSalt,
+} from "./note";
 
-export const generateTxProof = async (params: {
-    type: 'deposit' | 'withdraw' | 'transfer'
-    notes: Note[];
-    amount: bigint;
-    tree: MerkleTree;
-}) => {
-    const { notes, amount, tree, type } = params;
+const N_INPUTS = 2;
 
-    const root = tree.root;
+export type TxType = "deposit" | "withdraw" | "transfer";
 
-    // Collect notes to be spent
-    const inNotes: Note[] = [];
-    let remainingAmount = params.amount;
-    for (const note of notes) {
-        inNotes.push(note);
-        remainingAmount -= note.amount;
-        if (remainingAmount <= 0n) {
-            break;
-        }
-    }
-
-    const totalInNoteAmount = inNotes.reduce((sum, note) => sum + note.amount, 0n);
-    if (type === 'withdraw' || type === 'transfer') {
-        if (totalInNoteAmount < amount) {
-            throw new Error("Insufficient funds");
-        }
-    }
-
-    // Determine the output notes
-    const changeAmount = totalInNoteAmount - amount;
-    let publicAmount: bigint = 0n;
-    const owner = 0n;
-    const outNotes = [];
-    if (type === 'deposit') {
-        publicAmount = amount;
-        outNotes.push(
-            new Note({ owner, amount: totalNoteAmount + amount })
-        );
-        outNotes.push(Note.dummy(owner));
-    } else if (type === 'withdraw') {
-        outNotes.push(new Note({ owner, amount: changeAmount }));
-        outNotes.push(new Note({ owner: recipeint, amount: amount }));
-    } else if (type === 'transfer') {
-        outNotes.push(new Note({ owner, amount: changeAmount }));
-        outNotes.push(new Note({ owner: recipient, amount: amount }));
-    } else {
-        throw new Error("Invalid transaction type");
-    }
-
-    const inPathIndices = [];
-    const inPathElements = [];
-    for (const note of inNotes) {
-        if (note.amount > 0) {
-            if (!Number.isFinite(note.index)) {
-                throw new Error("Note index required for nullifier");
-            }
-            const merkleProof = tree.createProof(note.index as number);
-            inPathIndices.push(BigInt(note.index as number));
-            inPathElements.push(merkleProof.pathElements);
-        } else {
-            inPathIndices.push(0);
-            inPathElements.push(new Array(tree.depth).fill(0));
-        }
-    }
-    const inputs = {
-        // Public inputs
-        root,
-        public_amount: publicAmount,
-        ext_data_hash: '',
-        nullifiers: inNotes.map((note) => note.nullifier()),
-        output_commitments: outNotes.map((n) => n.commitment()),
-        // Private inputs of input note
-        agg_pubkey: [0n, 0n],
-        amounts: inNotes.map((note) => note.amount),
-        salts: inNotes.map((note) => note.salt),
-        note_indices: inNotes.map((note) => note.index as number),
-        path_elements: inPathElements,
-        path_indices: inPathIndices,
-        // Private inputs of output note
-        output_pubkeys: [[]],
-        output_amount: outNotes.map((note) => note.amount),
-        output_salt: outNotes.map((note) => note.salt),
-        // Signature
-        sig_s: 0n,
-        sig_e: 0n,
-    };
-
-    const snarkJs = (globalThis as any).snarkjs;
-
-    if (!snarkJs) {
-        throw new Error("Snarkjs not found or not ready");
-    }
-
-    const { proof } = await generateSnarkProof({
-        snarkJs,
-        inputs,
-        circuit: circuitPath,
-    });
-
-    const proofBigInts = [...proof.a, ...proof.b.flat(), ...proof.c];
-    const proofBytesArr = proofBigInts.map((n) => numberToBytesBE(n, 32) as Uint8Array);
-    const proofBytes = concatBytes(...proofBytesArr) as Uint8Array;
-
-    const publicInputs = {
-        root,
-        nullifier: inputs.nullifier,
-        outputCommitment: inputs.output_commitment,
-        forceDummyNote: inputs.force_dummy_note,
-        publicDepositAmount: inputs.public_deposit_amount,
-        publicWithdrawAmount: inputs.public_withdraw_amount,
-    };
-
-    return {
-        proof: proofBytes,
-        publicInputs,
-    };
+export type BuildTransactParams = {
+  type: TxType;
+  amount: bigint;
+  /** Sender's Stellar address (ExtData.recipient when not withdrawing). */
+  sender: string;
+  /** Own group keys. */
+  groupSpendPublicKey: Point;
+  groupViewPublicKey: Point;
+  /** Unspent notes owned by this group. */
+  notes: OwnedNote[];
+  /** All commitments, dense by tree index, gaps = ZERO_LEAF. */
+  leaves: bigint[];
+  /** Stellar destination for a withdraw. */
+  withdrawRecipient?: string;
+  /** Recipient's 64-byte vault address for a transfer. */
+  recipientAddress?: string;
+  /**
+   * Aggregate FROST signature over `msg`. Optional: `msg` only depends on the
+   * built witness, so the usual flow is to build first (no signature), sign the
+   * returned `msg`, then set `input.sig_s`/`input.sig_e`.
+   */
+  signature?: FrostSignature;
 };
+
+/**
+ * Message the FROST group signs — mirrors transact.circom `msg_hash` exactly:
+ *   Poseidon(root, nullifiers[0..N-1], output_commitments[0,1], public_amount, ext_data_hash)
+ */
+export function deriveTransactMsg(p: {
+  root: bigint;
+  nullifiers: bigint[];
+  outputCommitments: bigint[];
+  publicAmount: bigint;
+  extDataHash: bigint;
+}): bigint {
+  return poseidonHash([
+    p.root,
+    ...p.nullifiers,
+    p.outputCommitments[0]!,
+    p.outputCommitments[1]!,
+    p.publicAmount,
+    p.extDataHash,
+  ]);
+}
+
+function merkleRoot(leaves: bigint[]): bigint {
+  return buildFullMerkleProof(
+    TREE_DEPTH,
+    leaves.length ? leaves : [ZERO_LEAF],
+    0,
+    ZERO_LEAF,
+  ).root;
+}
+
+function selectInputs(
+  notes: OwnedNote[],
+  target: bigint,
+): { selected: OwnedNote[]; total: bigint } {
+  const selected: OwnedNote[] = [];
+  let total = 0n;
+  for (const n of notes) {
+    if (total >= target) break;
+    selected.push(n);
+    total += n.note.amount;
+  }
+  return { selected, total };
+}
+
+/**
+ * Collects all witness inputs and builds the `TransactInput` + `ExtData` for a
+ * `pool.transact()` call. The aggregate signature is supplied by the caller.
+ */
+export function buildTransactContext(params: BuildTransactParams): {
+  input: TransactInput;
+  extData: ExtData;
+  msg: bigint;
+} {
+  const {
+    type,
+    amount,
+    sender,
+    groupSpendPublicKey,
+    groupViewPublicKey,
+    notes,
+    leaves,
+    withdrawRecipient,
+    recipientAddress,
+    signature,
+  } = params;
+
+  // ── input notes (deposit spends none; pad to N_INPUTS with dummies) ────────
+  const spendTarget = type === "deposit" ? 0n : amount;
+  const { selected, total } = selectInputs(notes, spendTarget);
+  if (selected.length > N_INPUTS)
+    throw new Error(`too many input notes required (max ${N_INPUTS})`);
+  if (type !== "deposit" && total < amount)
+    throw new Error("insufficient funds");
+
+  type InputSlot = { note: Note; index: number; real: boolean };
+  const inputs: InputSlot[] = selected.map((n) => ({
+    note: n.note,
+    index: n.index,
+    real: true,
+  }));
+  while (inputs.length < N_INPUTS) {
+    inputs.push({
+      note: { pubkey: groupSpendPublicKey, amount: 0n, salt: randomSalt() },
+      index: 0,
+      real: false,
+    });
+  }
+
+  const root = merkleRoot(leaves);
+  const zeroPath = Array(TREE_DEPTH).fill(0n) as bigint[];
+
+  const inCommitments = inputs.map((s) => noteCommitment(s.note));
+  const nullifiers = inputs.map((s, i) =>
+    noteNullifier(inCommitments[i]!, BigInt(s.index)),
+  );
+  const proofs = inputs.map((s, i) =>
+    s.real
+      ? buildFullMerkleProof(TREE_DEPTH, leaves, s.index, ZERO_LEAF)
+      : { root, pathElements: zeroPath, pathIndices: zeroPath },
+  );
+
+  // ── outputs by type (conservation: sum_in + public_amount == sum_out) ──────
+  const change = total - amount;
+  let publicAmount: bigint;
+  let extAmount: bigint;
+  let recipient: string;
+  let out0: { note: Note; encKey: Point };
+  let out1: { note: Note; encKey: Point };
+
+  const selfNote = (amt: bigint): Note => ({
+    pubkey: groupSpendPublicKey,
+    amount: amt,
+    salt: randomSalt(),
+  });
+
+  if (type === "deposit") {
+    publicAmount = amount;
+    extAmount = amount;
+    recipient = sender;
+    out0 = { note: selfNote(amount), encKey: groupViewPublicKey };
+    out1 = { note: selfNote(0n), encKey: groupViewPublicKey };
+  } else if (type === "withdraw") {
+    if (!withdrawRecipient) throw new Error("withdraw requires a recipient address");
+    publicAmount = BN254_FIELD - amount; // field-negative
+    extAmount = -amount;
+    recipient = withdrawRecipient;
+    out0 = { note: selfNote(change), encKey: groupViewPublicKey };
+    out1 = { note: selfNote(0n), encKey: groupViewPublicKey };
+  } else {
+    if (!recipientAddress) throw new Error("transfer requires a recipient vault address");
+    const recip = parseVaultAddress(recipientAddress);
+    publicAmount = 0n;
+    extAmount = 0n;
+    recipient = sender;
+    out0 = {
+      note: { pubkey: recip.groupSpendPublicKey, amount, salt: randomSalt() },
+      encKey: recip.groupViewPublicKey,
+    };
+    out1 = { note: selfNote(change), encKey: groupViewPublicKey };
+  }
+
+  const outputs = [out0, out1];
+  const outputCommitments = outputs.map((o) => noteCommitment(o.note));
+
+  const extData: ExtData = {
+    recipient,
+    ext_amount: extAmount,
+    encrypted_output0: encryptNote(out0.note, out0.encKey),
+    encrypted_output1: encryptNote(out1.note, out1.encKey),
+  };
+  const extDataHash = computeExtDataHash(extData);
+  const msg = deriveTransactMsg({
+    root,
+    nullifiers,
+    outputCommitments,
+    publicAmount,
+    extDataHash,
+  });
+
+  const input: TransactInput = {
+    root,
+    public_amount: publicAmount,
+    ext_data_hash: extDataHash,
+    nullifiers,
+    output_commitments: outputCommitments,
+    agg_pubkey: [groupSpendPublicKey.x, groupSpendPublicKey.y],
+    amounts: inputs.map((s) => s.note.amount),
+    salts: inputs.map((s) => s.note.salt),
+    note_indices: inputs.map((s) => BigInt(s.index)),
+    path_elements: proofs.map((p) => p.pathElements),
+    path_indices: proofs.map((p) => p.pathIndices),
+    output_pubkeys: [
+      [out0.note.pubkey.x, out0.note.pubkey.y],
+      [out1.note.pubkey.x, out1.note.pubkey.y],
+    ],
+    output_amounts: outputs.map((o) => o.note.amount),
+    output_salts: outputs.map((o) => o.note.salt),
+    sig_s: signature?.s ?? 0n,
+    sig_e: signature?.e ?? 0n,
+  };
+
+  return { input, extData, msg };
+}

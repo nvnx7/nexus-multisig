@@ -1,82 +1,69 @@
-import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import {
-    bytesToNumberBE,
-    concatBytes,
-    managedNonce,
-    numberToBytesBE,
-    randomBytes,
-} from "@noble/ciphers/utils.js";
-import { poseidonHash } from "nexus-crypto";
-import type { ShieldedWallet } from "../shielded";
+  type Point,
+  eciesDecrypt,
+  eciesEncrypt,
+  poseidonHash,
+} from "nexus-crypto";
+import {
+  bytesToHex,
+  bytesToNumberBE,
+  concatBytes,
+  hexToBytes,
+  numberToBytesBE,
+  randomBytes,
+} from "@noble/curves/utils.js";
 
-export class Note {
-    readonly owner: bigint;
-    amount: bigint;
-    readonly salt: bigint;
-    readonly index?: number;
+/** A shielded note owned by a group (pubkey = the group's spend public key). */
+export type Note = {
+  pubkey: Point;
+  amount: bigint;
+  salt: bigint;
+};
 
-    constructor(params: {
-        owner: bigint;
-        amount: bigint;
-        salt?: bigint;
-        index?: number;
-    }) {
-        let salt = params.salt;
-        if (!salt) {
-            salt = bytesToNumberBE(randomBytes(24));
-        }
+const AMOUNT_BYTES = 31;
+const SALT_BYTES = 24;
 
-        this.owner = params.owner;
-        this.amount = params.amount;
-        this.salt = salt;
-        this.index = params.index;
-    }
+export function randomSalt(): bigint {
+  return bytesToNumberBE(randomBytes(SALT_BYTES));
+}
 
-    commitment(): bigint {
-        return poseidonHash([this.owner, this.amount, this.salt]);
-    }
+/** Poseidon(pubkey.x, pubkey.y, amount, salt) — matches the circuit's NoteCommitment. */
+export function noteCommitment(note: Note): bigint {
+  return poseidonHash([note.pubkey.x, note.pubkey.y, note.amount, note.salt]);
+}
 
-    nullifier(): bigint {
-        console.log({ note: this });
-        if (!Number.isFinite(this.index)) {
-            throw new Error("Note index required for nullifier");
-        }
-        return poseidonHash([this.commitment(), BigInt(this.index as number)]);
-    }
+/** Poseidon(commitment, note_index) — matches the circuit's NoteNullifier. */
+export function noteNullifier(commitment: bigint, index: bigint): bigint {
+  return poseidonHash([commitment, index]);
+}
 
-    memo(viewKey: Uint8Array): Uint8Array {
-        const plainText = concatBytes(
-            numberToBytesBE(this.amount, 31),
-            numberToBytesBE(this.salt, 24),
-        );
-        const cipher = managedNonce(xchacha20poly1305)(viewKey);
-        const ciphertext = cipher.encrypt(plainText);
-        return ciphertext as Uint8Array;
-    }
+/** ECIES-encrypt a note's secret fields (amount || salt) to the owner group's view key. */
+export function encryptNote(note: Note, groupViewPublicKey: Point): string {
+  const plaintext = concatBytes(
+    numberToBytesBE(note.amount, AMOUNT_BYTES),
+    numberToBytesBE(note.salt, SALT_BYTES),
+  );
+  return bytesToHex(eciesEncrypt(groupViewPublicKey, plaintext));
+}
 
-    static fromMemo(memoBytes: Uint8Array, shieldedWallet: ShieldedWallet): Note | null {
-        try {
-            const cipher = managedNonce(xchacha20poly1305)(shieldedWallet.viewKey);
-            const plainText = cipher.decrypt(memoBytes);
-            if (plainText.length !== 63) {
-                return null;
-            }
-            const amount = bytesToNumberBE(plainText.slice(0, 31));
-            const salt = bytesToNumberBE(plainText.slice(31, 55));
-            const nonce = bytesToNumberBE(plainText.slice(55, 63));
-            return new Note({ owner: shieldedWallet.address, amount, salt });
-        } catch (_e) {
-            return null;
-        }
-    }
-
-    static dummy(owner: bigint): Note {
-        return new Note({
-            owner,
-            amount: 0n,
-            salt: bytesToNumberBE(randomBytes(24)),
-            nonce: 0n,
-            index: 0,
-        });
-    }
+/**
+ * Decrypt a note with the group view key (gvk). Returns null if the ciphertext
+ * isn't ours. The owner pubkey is supplied by the caller (the scanning group).
+ */
+export function decryptNote(
+  blob: string,
+  gvk: bigint,
+  ownerPubkey: Point,
+): Note | null {
+  try {
+    const pt = eciesDecrypt(gvk, hexToBytes(blob));
+    if (pt.length !== AMOUNT_BYTES + SALT_BYTES) return null;
+    return {
+      pubkey: ownerPubkey,
+      amount: bytesToNumberBE(pt.slice(0, AMOUNT_BYTES)),
+      salt: bytesToNumberBE(pt.slice(AMOUNT_BYTES)),
+    };
+  } catch {
+    return null;
+  }
 }

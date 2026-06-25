@@ -1,4 +1,5 @@
 import { scValToNative } from "@stellar/stellar-sdk";
+import { bytesToHex } from "@noble/curves/utils.js";
 import { getRpcServer } from "@/api/rpc";
 import { POOL_CONTRACT_ID_LOCAL } from "@/config/constants";
 
@@ -7,6 +8,8 @@ export type CommitmentRecord = {
   commitment: string;
   /** Insertion index in the Merkle tree */
   index: number;
+  /** Encrypted note (hex) — decryptable by the owning group's view key */
+  encrypted_output: string;
   /** Ledger sequence when the event was emitted */
   ledger: number;
 };
@@ -53,9 +56,11 @@ export async function getCommitments(
     const data = scValToNative(ev.value) as Record<string, unknown> | null;
     if (!data || !("index" in data)) continue;
 
+    const enc = data.encrypted_output as Uint8Array | undefined;
     records.push({
       commitment: commitment.toString(),
       index: Number(data.index),
+      encrypted_output: enc ? bytesToHex(enc) : "",
       ledger: ev.ledger,
     });
   }
