@@ -6,3 +6,6 @@ export * from "./ecies";
 export * from "./note";
 export * from "./merkle";
 export * from "./frost/index";
+export * from "./shielded";
+export * from "./zk";
+export * from "./groupViewKey";
