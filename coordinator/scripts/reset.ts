@@ -39,18 +39,19 @@ db.exec(`
   );
 
   CREATE TABLE sign_sessions (
-    id            TEXT PRIMARY KEY,
-    group_address TEXT NOT NULL,
-    proposer      TEXT NOT NULL,
-    tx            TEXT NOT NULL,
+    id                TEXT PRIMARY KEY,
+    group_address     TEXT NOT NULL,
+    proposer          TEXT NOT NULL,
+    tx_details        TEXT NOT NULL,
+    tx_hash           TEXT NOT NULL,
     threshold         INTEGER NOT NULL,
     nonce_commitments TEXT NOT NULL DEFAULT '{}',
     enc_nonces        TEXT NOT NULL DEFAULT '{}',
-    shares        TEXT NOT NULL DEFAULT '{}',
-    status        TEXT NOT NULL DEFAULT 'collecting_commits',
-    sig_s         TEXT,
-    sig_e         TEXT,
-    created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+    sig_shares        TEXT NOT NULL DEFAULT '{}',
+    status            TEXT NOT NULL DEFAULT 'collecting_commits',
+    sig_s             TEXT,
+    sig_e             TEXT,
+    created_at        INTEGER NOT NULL DEFAULT (unixepoch())
   );
 `);
 

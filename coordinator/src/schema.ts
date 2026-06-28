@@ -51,21 +51,23 @@ export const groups = sqliteTable("groups", {
 //
 // A sign_session is a proposed UTXO transaction plus the FROST ceremony state,
 // all in one row (no separate commits/shares tables):
-//   tx:                { type, amount, recipient }
-//   nonce_commitments: { [address]: SerializedNonceCommitments }   — public
+//   tx_details:        the fully-pinned witness + ext_data (see ui TxDetails)
+//   tx_hash:           the signing message (= deriveTransactMsg), for integrity
+//   nonce_commitments: { [address]: SerializedNonceCommitments }   — the signer set
 //   enc_nonces:        { [address]: eciesBlobHex }                 — each committer's
 //                      own nonces, ECIES-encrypted to their personal view key
-//   shares:            { [address]: z }                            — sign phase
+//   sig_shares:        { [address]: z }                            — sign phase
 
 export const signSessions = sqliteTable("sign_sessions", {
   id: text("id").primaryKey(),
   group_address: text("group_address").notNull(),
   proposer: text("proposer").notNull(),
-  tx: text("tx").notNull(),
+  tx_details: text("tx_details").notNull(),
+  tx_hash: text("tx_hash").notNull(),
   threshold: integer("threshold").notNull(),
   nonce_commitments: text("nonce_commitments").notNull().default("{}"),
   enc_nonces: text("enc_nonces").notNull().default("{}"),
-  shares: text("shares").notNull().default("{}"),
+  sig_shares: text("sig_shares").notNull().default("{}"),
   status: text("status", {
     enum: ["collecting_commits", "collecting_shares", "complete"],
   })
