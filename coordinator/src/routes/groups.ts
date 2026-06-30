@@ -30,14 +30,17 @@ groupsRouter.post("/", async (c) => {
   const db = getDb();
 
   if (dkg_session_id) {
-    const dkgSession = db.select({ status: dkgSessions.status }).from(dkgSessions).where(eq(dkgSessions.id, dkg_session_id)).get();
+    const [dkgSession] = await db
+      .select({ status: dkgSessions.status })
+      .from(dkgSessions)
+      .where(eq(dkgSessions.id, dkg_session_id));
     if (!dkgSession) return c.json({ error: "DKG session not found" }, 400);
     if (dkgSession.status !== "complete") return c.json({ error: "DKG session is not yet complete" }, 409);
   }
 
   const id = randomUUID();
-  db.transaction((tx) => {
-    tx.insert(groups).values({
+  await db.transaction(async (tx) => {
+    await tx.insert(groups).values({
       id,
       threshold,
       members: JSON.stringify(members),
@@ -48,16 +51,16 @@ groupsRouter.post("/", async (c) => {
       enc_pubkey_y: enc_pubkey?.[1] ?? null,
       group_view_key: JSON.stringify(group_view_key ?? {}),
       dkg_session_id: dkg_session_id ?? null,
-    }).run();
+    });
     if (dkg_session_id) {
-      tx.update(dkgSessions).set({ group_id: id }).where(eq(dkgSessions.id, dkg_session_id)).run();
+      await tx.update(dkgSessions).set({ group_id: id }).where(eq(dkgSessions.id, dkg_session_id));
     }
   });
 
   return c.json({ id, group_address }, 201);
 });
 
-groupsRouter.get("/", (c) => {
+groupsRouter.get("/", async (c) => {
   const address = c.req.query("address");
   const group_address = c.req.query("group_address");
   const db = getDb();
@@ -65,36 +68,36 @@ groupsRouter.get("/", (c) => {
   const projection = {
     id: groups.id,
     threshold: groups.threshold,
-    total: sql<number>`json_array_length(${groups.members})`,
+    total: sql<number>`jsonb_array_length(${groups.members}::jsonb)`,
     group_address: groups.group_address,
     created_at: groups.created_at,
   };
 
   let rows;
   if (address) {
-    rows = db
+    rows = await db
       .select(projection)
       .from(groups)
-      .where(sql`EXISTS (SELECT 1 FROM json_each(${groups.members}) WHERE json_extract(value, '$.address') = ${address})`)
-      .orderBy(desc(groups.created_at))
-      .all();
+      .where(
+        sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${groups.members}::jsonb) elem WHERE elem->>'address' = ${address})`,
+      )
+      .orderBy(desc(groups.created_at));
   } else if (group_address) {
-    rows = db.select(projection).from(groups).where(eq(groups.group_address, group_address)).orderBy(desc(groups.created_at)).all();
+    rows = await db.select(projection).from(groups).where(eq(groups.group_address, group_address)).orderBy(desc(groups.created_at));
   } else {
-    rows = db.select(projection).from(groups).orderBy(desc(groups.created_at)).all();
+    rows = await db.select(projection).from(groups).orderBy(desc(groups.created_at));
   }
 
   return c.json({ groups: rows });
 });
 
 // :key may be the group id or its group_address (vaults are referenced by group_address in the UI).
-groupsRouter.get("/:id", (c) => {
+groupsRouter.get("/:id", async (c) => {
   const key = c.req.param("id");
-  const group = getDb()
+  const [group] = await getDb()
     .select()
     .from(groups)
-    .where(or(eq(groups.id, key), eq(groups.group_address, key)))
-    .get();
+    .where(or(eq(groups.id, key), eq(groups.group_address, key)));
   if (!group) return c.json({ error: "Group not found" }, 404);
 
   const members: Member[] = JSON.parse(group.members);
@@ -121,7 +124,7 @@ groupsRouter.post("/:id/shares", async (c) => {
   const id = c.req.param("id");
   const db = getDb();
 
-  const group = db.select({ members: groups.members }).from(groups).where(eq(groups.id, id)).get();
+  const [group] = await db.select({ members: groups.members }).from(groups).where(eq(groups.id, id));
   if (!group) return c.json({ error: "Group not found" }, 404);
 
   const body = await c.req.json<{ address: string; R: [string, string] | null; ciphertext: string }[]>();
@@ -139,17 +142,17 @@ groupsRouter.post("/:id/shares", async (c) => {
     body.map((s) => [s.address, { R: s.R, ciphertext: s.ciphertext }]),
   );
 
-  db.update(groups).set({ enc_shares: JSON.stringify(enc_shares) }).where(eq(groups.id, id)).run();
+  await db.update(groups).set({ enc_shares: JSON.stringify(enc_shares) }).where(eq(groups.id, id));
 
   return c.json({ status: "ok" });
 });
 
-groupsRouter.get("/:id/shares", (c) => {
+groupsRouter.get("/:id/shares", async (c) => {
   const id = c.req.param("id");
   const address = c.req.query("address");
   if (!address) return c.json({ error: "address query param required" }, 400);
 
-  const group = getDb().select({ enc_shares: groups.enc_shares }).from(groups).where(eq(groups.id, id)).get();
+  const [group] = await getDb().select({ enc_shares: groups.enc_shares }).from(groups).where(eq(groups.id, id));
   if (!group) return c.json({ error: "Group not found" }, 404);
 
   const enc_shares: Record<string, ShareEntry> = JSON.parse(group.enc_shares);

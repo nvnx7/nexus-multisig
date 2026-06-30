@@ -1,33 +1,28 @@
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
-import { desc, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { dkgSessions, getDb } from "../db";
 
 export const dkgRouter = new Hono();
 
-dkgRouter.get("/", (c) => {
+dkgRouter.get("/", async (c) => {
   const address = c.req.query("address");
   if (!address) return c.json({ error: "address query param is required" }, 400);
 
-  const rows = getDb()
+  const rows = await getDb()
     .select()
     .from(dkgSessions)
     .where(
-      sql`EXISTS (SELECT 1 FROM json_each(${dkgSessions.participants}) WHERE value = ${address})`,
+      sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(${dkgSessions.participants}::jsonb) value WHERE value = ${address})`,
     )
-    .orderBy(desc(dkgSessions.created_at))
-    .all();
+    .orderBy(desc(dkgSessions.created_at));
 
   return c.json({ sessions: rows });
 });
 
-dkgRouter.get("/:id", (c) => {
+dkgRouter.get("/:id", async (c) => {
   const { id } = c.req.param();
-  const row = getDb()
-    .select()
-    .from(dkgSessions)
-    .where(sql`${dkgSessions.id} = ${id}`)
-    .get();
+  const [row] = await getDb().select().from(dkgSessions).where(eq(dkgSessions.id, id));
 
   if (!row) return c.json({ error: "Session not found" }, 404);
 
@@ -65,11 +60,7 @@ dkgRouter.post("/:id/round1", async (c) => {
   }
 
   const db = getDb();
-  const row = db
-    .select()
-    .from(dkgSessions)
-    .where(sql`${dkgSessions.id} = ${id}`)
-    .get();
+  const [row] = await db.select().from(dkgSessions).where(eq(dkgSessions.id, id));
 
   if (!row) return c.json({ error: "Session not found" }, 404);
 
@@ -84,13 +75,13 @@ dkgRouter.post("/:id/round1", async (c) => {
   const allSubmitted = Object.keys(round1Data).length === participants.length;
   const status = allSubmitted ? "round2" : "round1";
 
-  db.update(dkgSessions)
+  await db
+    .update(dkgSessions)
     .set({
       round1_data: JSON.stringify(round1Data),
       status,
     })
-    .where(sql`id = ${id}`)
-    .run();
+    .where(eq(dkgSessions.id, id));
 
   return c.json({ success: true, status });
 });
@@ -107,11 +98,7 @@ dkgRouter.post("/:id/round2", async (c) => {
   }
 
   const db = getDb();
-  const row = db
-    .select()
-    .from(dkgSessions)
-    .where(sql`${dkgSessions.id} = ${id}`)
-    .get();
+  const [row] = await db.select().from(dkgSessions).where(eq(dkgSessions.id, id));
 
   if (!row) return c.json({ error: "Session not found" }, 404);
 
@@ -126,13 +113,13 @@ dkgRouter.post("/:id/round2", async (c) => {
   const allSubmitted = Object.keys(round2Data).length === participants.length;
   const status = allSubmitted ? "complete" : "round2";
 
-  db.update(dkgSessions)
+  await db
+    .update(dkgSessions)
     .set({
       round2_data: JSON.stringify(round2Data),
       status,
     })
-    .where(sql`id = ${id}`)
-    .run();
+    .where(eq(dkgSessions.id, id));
 
   return c.json({ success: true, status });
 });
@@ -151,15 +138,14 @@ dkgRouter.post("/", async (c) => {
     return c.json({ error: "duplicate participant addresses" }, 400);
 
   const id = randomUUID();
-  getDb()
+  await getDb()
     .insert(dkgSessions)
     .values({
       id,
       threshold,
       creator_address: participants[0]!,
       participants: JSON.stringify(participants),
-    })
-    .run();
+    });
 
   return c.json({ id, participants: participants.map((address) => ({ address })) }, 201);
 });

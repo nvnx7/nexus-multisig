@@ -1,16 +1,16 @@
 #!/usr/bin/env bun
-import { Database } from "bun:sqlite";
-import { join } from "node:path";
-import { rmSync } from "node:fs";
+import { SQL } from "bun";
 
-const DB_PATH = join(import.meta.dir, "../coordinator.db");
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL is required");
 
-rmSync(DB_PATH, { force: true });
+const sql = new SQL(url);
 
-const db = new Database(DB_PATH);
-db.exec("PRAGMA journal_mode = WAL;");
+await sql`DROP TABLE IF EXISTS dkg_sessions`;
+await sql`DROP TABLE IF EXISTS groups`;
+await sql`DROP TABLE IF EXISTS sign_sessions`;
 
-db.exec(`
+await sql`
   CREATE TABLE dkg_sessions (
     id              TEXT PRIMARY KEY,
     threshold       INTEGER NOT NULL,
@@ -20,9 +20,11 @@ db.exec(`
     round2_data     TEXT NOT NULL DEFAULT '{}',
     status          TEXT NOT NULL DEFAULT 'round1',
     group_id        TEXT,
-    created_at      INTEGER NOT NULL DEFAULT (unixepoch())
-  );
+    created_at      INTEGER NOT NULL DEFAULT extract(epoch from now())::integer
+  )
+`;
 
+await sql`
   CREATE TABLE groups (
     id             TEXT PRIMARY KEY,
     threshold      INTEGER NOT NULL,
@@ -35,9 +37,11 @@ db.exec(`
     enc_shares     TEXT NOT NULL DEFAULT '{}',
     group_view_key TEXT NOT NULL DEFAULT '{}',
     dkg_session_id TEXT,
-    created_at     INTEGER NOT NULL DEFAULT (unixepoch())
-  );
+    created_at     INTEGER NOT NULL DEFAULT extract(epoch from now())::integer
+  )
+`;
 
+await sql`
   CREATE TABLE sign_sessions (
     id                TEXT PRIMARY KEY,
     group_address     TEXT NOT NULL,
@@ -51,9 +55,9 @@ db.exec(`
     status            TEXT NOT NULL DEFAULT 'collecting_commits',
     sig_s             TEXT,
     sig_e             TEXT,
-    created_at        INTEGER NOT NULL DEFAULT (unixepoch())
-  );
-`);
+    created_at        INTEGER NOT NULL DEFAULT extract(epoch from now())::integer
+  )
+`;
 
-db.close();
+await sql.close();
 console.log("Database reset.");

@@ -42,45 +42,42 @@ signSessionsRouter.post("/", async (c) => {
     );
 
   const db = getDb();
-  const group = db
+  const [group] = await db
     .select({ threshold: groups.threshold })
     .from(groups)
-    .where(eq(groups.group_address, group_address))
-    .get();
+    .where(eq(groups.group_address, group_address));
   if (!group) return c.json({ error: "Group not found for group_address" }, 404);
 
   const id = randomUUID();
-  db.insert(signSessions)
-    .values({
-      id,
-      group_address,
-      proposer,
-      tx_details: JSON.stringify(tx_details),
-      tx_hash,
-      threshold: group.threshold,
-      nonce_commitments: JSON.stringify({ [proposer]: nonce_commitment }),
-      enc_nonces: JSON.stringify(enc_nonces ? { [proposer]: enc_nonces } : {}),
-      // A 1-of-n group is already past commit collection.
-      status: group.threshold <= 1 ? "collecting_shares" : "collecting_commits",
-    })
-    .run();
+  await db.insert(signSessions).values({
+    id,
+    group_address,
+    proposer,
+    tx_details: JSON.stringify(tx_details),
+    tx_hash,
+    threshold: group.threshold,
+    nonce_commitments: JSON.stringify({ [proposer]: nonce_commitment }),
+    enc_nonces: JSON.stringify(enc_nonces ? { [proposer]: enc_nonces } : {}),
+    // A 1-of-n group is already past commit collection.
+    status: group.threshold <= 1 ? "collecting_shares" : "collecting_commits",
+  });
 
   return c.json({ id }, 201);
 });
 
 // List a vault's proposals (by group_address).
-signSessionsRouter.get("/", (c) => {
+signSessionsRouter.get("/", async (c) => {
   const group_address = c.req.query("group_address");
   const db = getDb();
   const rows = group_address
-    ? db.select().from(signSessions).where(eq(signSessions.group_address, group_address)).orderBy(desc(signSessions.created_at)).all()
-    : db.select().from(signSessions).orderBy(desc(signSessions.created_at)).all();
+    ? await db.select().from(signSessions).where(eq(signSessions.group_address, group_address)).orderBy(desc(signSessions.created_at))
+    : await db.select().from(signSessions).orderBy(desc(signSessions.created_at));
   return c.json({ sessions: rows.map(summary) });
 });
 
 // Full session detail.
-signSessionsRouter.get("/:id", (c) => {
-  const r = getDb().select().from(signSessions).where(eq(signSessions.id, c.req.param("id"))).get();
+signSessionsRouter.get("/:id", async (c) => {
+  const [r] = await getDb().select().from(signSessions).where(eq(signSessions.id, c.req.param("id")));
   if (!r) return c.json({ error: "Sign session not found" }, 404);
   return c.json({
     session: {
@@ -105,7 +102,7 @@ signSessionsRouter.get("/:id", (c) => {
 signSessionsRouter.post("/:id/commits", async (c) => {
   const id = c.req.param("id");
   const db = getDb();
-  const r = db.select().from(signSessions).where(eq(signSessions.id, id)).get();
+  const [r] = await db.select().from(signSessions).where(eq(signSessions.id, id));
   if (!r) return c.json({ error: "Sign session not found" }, 404);
   if (r.status !== "collecting_commits")
     return c.json({ error: "Session is no longer accepting commitments" }, 409);
@@ -126,10 +123,10 @@ signSessionsRouter.post("/:id/commits", async (c) => {
   const count = Object.keys(commits).length;
   const status = count >= r.threshold ? "collecting_shares" : "collecting_commits";
 
-  db.update(signSessions)
+  await db
+    .update(signSessions)
     .set({ nonce_commitments: JSON.stringify(commits), enc_nonces: JSON.stringify(nonces), status })
-    .where(eq(signSessions.id, id))
-    .run();
+    .where(eq(signSessions.id, id));
 
   return c.json({ status, nonce_commitment_count: count });
 });
@@ -138,7 +135,7 @@ signSessionsRouter.post("/:id/commits", async (c) => {
 signSessionsRouter.post("/:id/sig-shares", async (c) => {
   const id = c.req.param("id");
   const db = getDb();
-  const r = db.select().from(signSessions).where(eq(signSessions.id, id)).get();
+  const [r] = await db.select().from(signSessions).where(eq(signSessions.id, id));
   if (!r) return c.json({ error: "Sign session not found" }, 404);
   if (r.status !== "collecting_shares")
     return c.json({ error: "Session is not collecting signature shares" }, 409);
@@ -157,10 +154,10 @@ signSessionsRouter.post("/:id/sig-shares", async (c) => {
   const count = Object.keys(shares).length;
   const status = count >= r.threshold ? "complete" : "collecting_shares";
 
-  db.update(signSessions)
+  await db
+    .update(signSessions)
     .set({ sig_shares: JSON.stringify(shares), status })
-    .where(eq(signSessions.id, id))
-    .run();
+    .where(eq(signSessions.id, id));
 
   return c.json({ status, sig_share_count: count });
 });
@@ -169,12 +166,12 @@ signSessionsRouter.post("/:id/sig-shares", async (c) => {
 signSessionsRouter.post("/:id/signature", async (c) => {
   const id = c.req.param("id");
   const db = getDb();
-  const r = db.select().from(signSessions).where(eq(signSessions.id, id)).get();
+  const [r] = await db.select().from(signSessions).where(eq(signSessions.id, id));
   if (!r) return c.json({ error: "Sign session not found" }, 404);
 
   const { s, e } = await c.req.json<{ s: string; e: string }>();
   if (!s || !e) return c.json({ error: "s and e are required" }, 400);
 
-  db.update(signSessions).set({ sig_s: s, sig_e: e }).where(eq(signSessions.id, id)).run();
+  await db.update(signSessions).set({ sig_s: s, sig_e: e }).where(eq(signSessions.id, id));
   return c.json({ status: "ok" });
 });

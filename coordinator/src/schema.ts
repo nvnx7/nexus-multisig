@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, pgTable, text } from "drizzle-orm/pg-core";
 
 // ── DKG sessions ───────────────────────────────────────────────────────────
 //
@@ -7,7 +7,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 // round2_data: { [sender]: { shares: { [recipient]: { R: [x,y]|null, ciphertext } },
 //                            enc_key_shares?: { [recipient]: { R: [x,y]|null, ciphertext } } } }
 
-export const dkgSessions = sqliteTable("dkg_sessions", {
+export const dkgSessions = pgTable("dkg_sessions", {
   id: text("id").primaryKey(),
   threshold: integer("threshold").notNull(),
   creator_address: text("creator_address").notNull(),
@@ -20,7 +20,7 @@ export const dkgSessions = sqliteTable("dkg_sessions", {
   group_id: text("group_id"),
   created_at: integer("created_at")
     .notNull()
-    .default(sql`(unixepoch())`),
+    .default(sql`extract(epoch from now())::integer`),
 });
 
 // ── Groups ─────────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ export const dkgSessions = sqliteTable("dkg_sessions", {
 // group_view_key:  { [address]: string } — the common view key, ECIES-encrypted
 //                  to each member's personal view key
 
-export const groups = sqliteTable("groups", {
+export const groups = pgTable("groups", {
   id: text("id").primaryKey(),
   threshold: integer("threshold").notNull(),
   members: text("members").notNull(), // JSON: { address, pubkey }[]
@@ -44,7 +44,7 @@ export const groups = sqliteTable("groups", {
   dkg_session_id: text("dkg_session_id"),
   created_at: integer("created_at")
     .notNull()
-    .default(sql`(unixepoch())`),
+    .default(sql`extract(epoch from now())::integer`),
 });
 
 // ── FROST signing sessions ─────────────────────────────────────────────────
@@ -58,7 +58,7 @@ export const groups = sqliteTable("groups", {
 //                      own nonces, ECIES-encrypted to their personal view key
 //   sig_shares:        { [address]: z }                            — sign phase
 
-export const signSessions = sqliteTable("sign_sessions", {
+export const signSessions = pgTable("sign_sessions", {
   id: text("id").primaryKey(),
   group_address: text("group_address").notNull(),
   proposer: text("proposer").notNull(),
@@ -77,7 +77,7 @@ export const signSessions = sqliteTable("sign_sessions", {
   sig_e: text("sig_e"),
   created_at: integer("created_at")
     .notNull()
-    .default(sql`(unixepoch())`),
+    .default(sql`extract(epoch from now())::integer`),
 });
 
 // ── Inferred types ─────────────────────────────────────────────────────────
