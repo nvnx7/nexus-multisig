@@ -170,6 +170,17 @@ async function main() {
   }
 
   const admin = ADMIN || deployer.publicKey();
+
+  if (NETWORK === "local" && !TOKEN) {
+    // Native XLM SAC must be explicitly wrapped on a fresh standalone network
+    // before any contract can call transfer() on it — `contract id asset`
+    // only computes the deterministic id, it doesn't instantiate the contract.
+    // No-op (nothrow) if it's already deployed.
+    await $`stellar contract asset deploy --asset native --source-account ${DEPLOYER} --network ${NETWORK}`
+      .quiet()
+      .nothrow();
+  }
+
   const token =
     TOKEN ||
     (
