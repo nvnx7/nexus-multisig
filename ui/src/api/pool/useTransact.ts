@@ -1,15 +1,7 @@
 "use client";
 
-/**
- * Hook to perform a shielded pool transaction.
- *
- * Generates the Groth16 proof and assembles the `pool.transact()` call
- * (`buildTransactTx`), then signs it with the connected wallet, submits it, and
- * waits for confirmation. The caller supplies a ready-built witness
- * (`TransactInput`) and the external data (`ExtData`).
- */
-
-import { useCallback, useState } from "react";
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { buildTransactTx, type TransactInput, type ExtData } from "./transact";
 import { signAndSubmit } from "@/api/rpc";
 
@@ -21,51 +13,44 @@ export type TransactStatus =
   | "error";
 
 export function useTransact() {
-  const [status, setStatus] = useState<TransactStatus>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"proving" | "signing" | null>(null);
 
-  const transact = useCallback(
-    async (
-      senderAddress: string,
-      input: TransactInput,
-      extData: ExtData,
-    ): Promise<string> => {
-      setError(null);
-      setTxHash(null);
-      try {
-        // 1. Generate the proof and assemble the unsigned transaction.
-        setStatus("proving");
-        const unsignedXdr = await buildTransactTx(senderAddress, input, extData);
-
-        // 2. Sign with the wallet, submit, and await confirmation.
-        setStatus("signing");
-        const hash = await signAndSubmit(unsignedXdr, senderAddress);
-
-        setTxHash(hash);
-        setStatus("success");
-        return hash;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Transaction failed");
-        setStatus("error");
-        throw err;
-      }
+  const mutation = useMutation({
+    mutationFn: async ({
+      senderAddress,
+      input,
+      extData,
+    }: {
+      senderAddress: string;
+      input: TransactInput;
+      extData: ExtData;
+    }) => {
+      setPhase("proving");
+      const tx = await buildTransactTx(senderAddress, input, extData);
+      // setPhase("signing");
+      // const hash = await signAndSubmit(tx, senderAddress);
+      const hash = await tx.signAndSend();
+      console.log("transact hash", hash);
+      return "";
     },
-    [],
-  );
+    onSettled: () => setPhase(null),
+  });
 
-  const reset = useCallback(() => {
-    setStatus("idle");
-    setError(null);
-    setTxHash(null);
-  }, []);
+  const status: TransactStatus = mutation.isPending
+    ? (phase ?? "proving")
+    : mutation.isSuccess
+      ? "success"
+      : mutation.isError
+        ? "error"
+        : "idle";
 
   return {
-    transact,
-    reset,
+    transact: (senderAddress: string, input: TransactInput, extData: ExtData) =>
+      mutation.mutateAsync({ senderAddress, input, extData }),
+    reset: mutation.reset,
     status,
-    error,
-    txHash,
-    isPending: status === "proving" || status === "signing",
+    error: mutation.error instanceof Error ? mutation.error.message : null,
+    txHash: mutation.data ?? null,
+    isPending: mutation.isPending,
   };
 }

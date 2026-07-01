@@ -1,15 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import coordinatorClient from "@/api/coordinator";
-import type { TxProposal } from "./createSignSession";
+import type { TxDetails } from "@/lib/tx/txDetails";
+
+export type SignSessionStatus =
+  | "collecting_commits"
+  | "collecting_shares"
+  | "complete";
 
 export type SignSessionSummary = {
   id: string;
   group_address: string;
   proposer: string;
-  tx: TxProposal;
+  tx_details: TxDetails;
+  tx_hash: string;
   threshold: number;
-  status: "collecting_commits" | "collecting_shares" | "complete";
+  status: SignSessionStatus;
   nonce_commitment_count: number;
+  sig_share_count: number;
   created_at: number;
 };
 

@@ -1,7 +1,7 @@
 import { poseidonHash } from "nexus-crypto";
 
 export const POOL_CONTRACT_ID_LOCAL =
-  "CCH4ZVNUUQU7GSGMZKHYZCCSIHRLQC2VJMF46TIMD3VSJJB4GNKXXKDP";
+  "CDSWJLDL4T4QTD5BEFNFQIJ62ZTPPI3O4XXUT3K24XIYYFSIYF3OIYDQ";
 
 export const POOL_CONTRACT_ID_TESTNET = "";
 
@@ -21,3 +21,6 @@ export const TREE_DEPTH = 20;
 // Canonical empty-leaf value for the commitment tree: Poseidon("XLM") =
 // Poseidon(88, 76, 77). MUST match the pool contract's `get_zeroes()[0]`.
 export const ZERO_LEAF = poseidonHash([88n, 76n, 77n]);
+
+/** Number of stroops (base units) per one XLM. */
+export const STROOPS_PER_XLM = 10_000_000n;

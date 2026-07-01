@@ -10,7 +10,7 @@ import {
 import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit";
 import { FreighterModule } from "@creit-tech/stellar-wallets-kit/modules/freighter";
 import { LobstrModule } from "@creit-tech/stellar-wallets-kit/modules/lobstr";
-import { ShieldedWallet } from "@/lib/shielded";
+import { ShieldedWallet } from "nexus-crypto";
 import { passphraseNetwork } from "@/config/env";
 import { registerShieldedAddress } from "@/api/pool/register";
 import { getShieldedAddress } from "@/api/pool/getShieldedAddress";
@@ -150,7 +150,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setStellarAddress(null);
       setShielded(null);
       localStorage.removeItem(STELLAR_ADDR_KEY);
-      StellarWalletsKit.disconnect().catch(() => {});
+      StellarWalletsKit.disconnect().catch(() => { });
       setConnectPhase("idle");
 
       const isUserCancel =
@@ -158,12 +158,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         err !== null &&
         (err as { code?: number }).code === -1;
       if (!isUserCancel) {
-        const msg =
+        let msg =
           err instanceof Error
             ? err.message
             : typeof err === "object" && err !== null && "message" in err
               ? String((err as { message: unknown }).message)
               : "Wallet connection failed.";
+
+        if (msg.toLowerCase().includes("not found")) {
+          msg = "Insufficient XLM balance";
+        }
+
         setConnectError(msg);
       }
     }
@@ -175,7 +180,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setConnectError(null);
     setConnectPhase("idle");
     localStorage.removeItem(STELLAR_ADDR_KEY);
-    StellarWalletsKit.disconnect().catch(() => {});
+    StellarWalletsKit.disconnect().catch(() => { });
   }, []);
 
   return (

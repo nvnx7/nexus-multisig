@@ -1,4 +1,4 @@
-import { Badge, Box, Button, Flex, Separator, Text } from "@chakra-ui/react";
+import { Badge, Box, Button, Flex, Separator, Spinner, Text } from "@chakra-ui/react";
 import {
   ArrowLeft,
   Copy,
@@ -6,6 +6,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
 } from "lucide-react";
+import { formatXLM } from "@/utils/token";
 
 interface Member {
   address: string;
@@ -13,7 +14,8 @@ interface Member {
 
 interface VaultInfoPanelProps {
   vaultAddress: string;
-  balance: number;
+  balance: bigint | null;
+  balanceLoading: boolean;
   threshold: number;
   total: number;
   members: Member[];
@@ -27,6 +29,7 @@ interface VaultInfoPanelProps {
 export function VaultInfoPanel({
   vaultAddress,
   balance,
+  balanceLoading,
   threshold,
   total,
   members,
@@ -108,12 +111,18 @@ export function VaultInfoPanel({
         <Text fontFamily="mono" fontSize="2xs" letterSpacing="widest" textTransform="uppercase" color="brand.text">
           Available Vault Balance
         </Text>
-        <Text fontFamily="heading" fontSize="4xl" fontWeight="bold" color="white" mt={1}>
-          {balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM
-        </Text>
-        <Text fontFamily="body" fontSize="xs" color="brand.text">
-          ≈ ${(balance * 0.1).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-        </Text>
+        {balanceLoading ? (
+          <Flex align="center" gap={2} mt={1}>
+            <Spinner size="sm" color="brand.text" />
+            <Text fontFamily="body" fontSize="sm" color="brand.text">
+              Scanning notes…
+            </Text>
+          </Flex>
+        ) : (
+          <Text fontFamily="heading" fontSize="4xl" fontWeight="bold" color="white" mt={1}>
+            {formatXLM(balance ?? 0n)} XLM
+          </Text>
+        )}
       </Flex>
 
       {/* Security Policy */}

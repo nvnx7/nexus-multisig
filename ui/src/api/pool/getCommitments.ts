@@ -1,6 +1,6 @@
 import { scValToNative } from "@stellar/stellar-sdk";
 import { bytesToHex } from "@noble/curves/utils.js";
-import { getRpcServer } from "@/api/rpc";
+import { getRpcServer, getEarliestLedger } from "@/api/rpc";
 import { POOL_CONTRACT_ID_LOCAL } from "@/config/constants";
 
 export type CommitmentRecord = {
@@ -21,7 +21,7 @@ export type CommitmentRecord = {
  * Pass a known deployment ledger as startLedger to scan from contract creation.
  */
 export async function getCommitments(
-  startLedger = 1,
+  startLedger?: number,
 ): Promise<CommitmentRecord[]> {
   if (!POOL_CONTRACT_ID_LOCAL)
     throw new Error(
@@ -29,8 +29,9 @@ export async function getCommitments(
     );
 
   const server = getRpcServer();
+  const ledger = startLedger ?? await getEarliestLedger(server);
   const response = await server.getEvents({
-    startLedger,
+    startLedger: ledger,
     filters: [{ type: "contract", contractIds: [POOL_CONTRACT_ID_LOCAL] }],
     limit: 10_000,
   });

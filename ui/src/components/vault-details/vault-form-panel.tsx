@@ -8,24 +8,16 @@ import { PendingTx } from "./types";
 
 interface VaultFormPanelProps {
   activeTab: "deposit" | "withdraw" | "transfer";
-  balance: number;
   pendingTxs: PendingTx[];
   notification: { message: string; type: "success" | "info" | "error" } | null;
-  onDeposit: (amount: number) => void;
-  onProposeWithdraw: (recipient: string, amount: number) => void;
-  onProposeTransfer: (destination: string, amount: number) => void;
-  onSimulateCoSign: (id: string) => void;
+  onSelectSession: (id: string) => void;
 }
 
 export function VaultFormPanel({
   activeTab,
-  balance,
   pendingTxs,
   notification,
-  onDeposit,
-  onProposeWithdraw,
-  onProposeTransfer,
-  onSimulateCoSign,
+  onSelectSession,
 }: VaultFormPanelProps) {
   return (
     <Box
@@ -40,7 +32,6 @@ export function VaultFormPanel({
       gap={6}
       overflowY="auto"
     >
-      {/* Dynamic Success/Error Notification Alert Banner */}
       {notification && (
         <Flex
           align="center"
@@ -76,23 +67,13 @@ export function VaultFormPanel({
         </Flex>
       )}
 
-      {/* Render active form based on activeTab */}
-      {activeTab === "deposit" && (
-        <DepositForm onDeposit={onDeposit} />
-      )}
-
-      {activeTab === "withdraw" && (
-        <WithdrawForm balance={balance} onPropose={onProposeWithdraw} />
-      )}
-
-      {activeTab === "transfer" && (
-        <TransferForm balance={balance} onPropose={onProposeTransfer} />
-      )}
+      {activeTab === "deposit" && <DepositForm />}
+      {activeTab === "withdraw" && <WithdrawForm />}
+      {activeTab === "transfer" && <TransferForm />}
 
       <Separator borderColor="border.subtle" my={2} />
 
-      {/* Render Pending Transactions simulation feed */}
-      <PendingTxList pendingTxs={pendingTxs} onSimulateCoSign={onSimulateCoSign} />
+      <PendingTxList pendingTxs={pendingTxs} onSelectSession={onSelectSession} />
     </Box>
   );
 }

@@ -9,7 +9,7 @@ import { useWallet } from "@/context/wallet-context";
 import { useGetDkgSession } from "@/api/dkg/getDkgSession";
 import { useCreateGroup } from "@/api/groups/createGroup";
 import { getShieldedAddress } from "@/api/pool/getShieldedAddress";
-import { encryptGvkFor, generateGroupViewKey } from "@/lib/groupViewKey";
+import { encryptGvkFor, generateGroupViewKey } from "nexus-crypto";
 import { computeMyFrostKey } from "@/lib/dkg";
 import { saveFrostKey } from "@/lib/frostKeyStore";
 import { bjj_FROST } from "nexus-crypto";

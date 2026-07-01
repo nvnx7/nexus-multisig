@@ -1,13 +1,20 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Box, Flex, Spinner, Text, Button } from "@chakra-ui/react";
 import { AlertCircle } from "lucide-react";
 import { useWallet } from "@/context/wallet-context";
+import { formatXLM } from "@/utils/token";
 import { useGroupShieldedWallet } from "@/hooks/useGroupShieldedWallet";
-import type { TxProposal } from "@/api/sign-sessions/createSignSession";
+import type { TxDetails } from "@/lib/tx/txDetails";
 import { VaultInfoPanel } from "./vault-info-panel";
 import { VaultFormPanel } from "./vault-form-panel";
 import { PendingTx } from "./types";
+
+function txAmount(d: TxDetails): string {
+  if (d.type === "deposit") return formatXLM(BigInt(d.ext_data.ext_amount));
+  if (d.type === "withdraw") return formatXLM(-BigInt(d.ext_data.ext_amount));
+  return formatXLM(BigInt(d.output_notes[0]!.amount));
+}
 
 interface VaultDetailsDashboardProps {
   vaultAddress: string;
@@ -17,19 +24,12 @@ export function VaultDetailsDashboard({ vaultAddress }: VaultDetailsDashboardPro
   const router = useRouter();
   const { stellarAddress } = useWallet();
 
-  // Navigation tab state
   const [activeTab, setActiveTab] = useState<"deposit" | "withdraw" | "transfer">("deposit");
-
-  // Simulated balance (real balance needs note scanning — out of scope here)
-  const [balance] = useState<number>(1250.0);
-
-  // Notification states
   const [notification, setNotification] = useState<{
     message: string;
     type: "success" | "info" | "error";
   } | null>(null);
 
-  // Auto-dismiss notification after 5s
   useEffect(() => {
     if (notification) {
       const timer = setTimeout(() => setNotification(null), 5000);
@@ -43,7 +43,8 @@ export function VaultDetailsDashboard({ vaultAddress }: VaultDetailsDashboardPro
     error: groupError,
     signSessions,
     shareableAddress,
-    commit,
+    balance,
+    balanceLoading,
   } = useGroupShieldedWallet(vaultAddress);
 
   if (groupLoading) {
@@ -73,72 +74,31 @@ export function VaultDetailsDashboard({ vaultAddress }: VaultDetailsDashboardPro
     );
   }
 
-  const threshold = group.threshold;
-  const total = group.total;
-  const members = group.members;
-
-  // Proposed transactions for this vault, shared via the coordinator.
   const pendingTxs: PendingTx[] = signSessions.map((s) => ({
     id: s.id,
     type:
-      s.tx.type === "transfer"
+      s.tx_details.type === "transfer"
         ? "Transfer"
-        : s.tx.type === "deposit"
+        : s.tx_details.type === "deposit"
           ? "Deposit"
           : "Withdraw",
-    recipient: s.tx.recipient ?? "",
-    amount: Number(s.tx.amount),
+    recipient: s.tx_details.ext_data.recipient,
+    amount: txAmount(s.tx_details),
     signatures: s.nonce_commitment_count,
     threshold: s.threshold,
     signedByMe: s.proposer === stellarAddress,
     executed: s.status === "complete",
   }));
 
-  // Propose a transaction (frostCommit + create sign session via the hook).
-  const propose = async (tx: TxProposal, okMessage: string) => {
-    try {
-      await commit(tx);
-      setNotification({ message: okMessage, type: "info" });
-    } catch (e) {
-      setNotification({
-        message: e instanceof Error ? e.message : "Failed to propose transaction",
-        type: "error",
-      });
-    }
-  };
-
-  const handleDeposit = (amount: number) =>
-    propose(
-      { type: "deposit", amount: String(amount) },
-      `Deposit of ${amount} proposed. Requires ${threshold} signatures.`,
-    );
-
-  const handleProposeWithdraw = (recipient: string, amount: number) =>
-    propose(
-      { type: "withdraw", amount: String(amount), recipient },
-      `Withdrawal proposed. Requires ${threshold} signatures.`,
-    );
-
-  const handleProposeTransfer = (destination: string, amount: number) =>
-    propose(
-      { type: "transfer", amount: String(amount), recipient: destination },
-      `Transfer proposed. Requires ${threshold} signatures.`,
-    );
-
-  const handleSimulateCoSign = () =>
-    setNotification({
-      message: "Co-signing arrives in the next update.",
-      type: "info",
-    });
-
   return (
     <Flex flex={1} h="full" minH="0" overflow="hidden" w="full">
       <VaultInfoPanel
         vaultAddress={shareableAddress ?? vaultAddress}
         balance={balance}
-        threshold={threshold}
-        total={total}
-        members={members}
+        balanceLoading={balanceLoading}
+        threshold={group.threshold}
+        total={group.total}
+        members={group.members}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onCopyAddress={() => {
@@ -150,13 +110,11 @@ export function VaultDetailsDashboard({ vaultAddress }: VaultDetailsDashboardPro
       />
       <VaultFormPanel
         activeTab={activeTab}
-        balance={balance}
         pendingTxs={pendingTxs}
         notification={notification}
-        onDeposit={handleDeposit}
-        onProposeWithdraw={handleProposeWithdraw}
-        onProposeTransfer={handleProposeTransfer}
-        onSimulateCoSign={handleSimulateCoSign}
+        onSelectSession={(sessionId) =>
+          router.push(`/vault/${vaultAddress}/session/${sessionId}`)
+        }
       />
     </Flex>
   );

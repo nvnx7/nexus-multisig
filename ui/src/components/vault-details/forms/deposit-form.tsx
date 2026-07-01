@@ -1,36 +1,66 @@
+"use client";
+
 import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { Box, Button, Flex, Input, Text } from "@chakra-ui/react";
+import { useGroupShieldedWallet } from "@/hooks/useGroupShieldedWallet";
+import { parseXLM } from "@/utils/token";
 
-interface DepositFormProps {
-  onDeposit: (amount: number) => void;
-}
+export function DepositForm() {
+  const { vaultAddress } = useParams<{ vaultAddress: string }>();
+  const { proposeTx } = useGroupShieldedWallet(vaultAddress);
+  const router = useRouter();
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-export function DepositForm({ onDeposit }: DepositFormProps) {
-  const [amount, setAmount] = useState<string>("");
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault();
+    setError(null);
     const amt = parseFloat(amount);
-    if (!isNaN(amt) && amt > 0) {
-      onDeposit(amt);
-      setAmount("");
+    if (isNaN(amt) || amt <= 0) {
+      setError("Please enter a valid deposit amount.");
+      return;
+    }
+    setPending(true);
+    try {
+      const id = await proposeTx({ type: "deposit", amount: parseXLM(amount) });
+      router.push(`/vault/${vaultAddress}/session/${id}`);
+    } catch (err) {
+      console.error("Failed to propose deposit:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to propose deposit",
+      );
+      setPending(false);
     }
   };
 
   return (
     <Flex direction="column" gap={4}>
       <Box>
-        <Text as="h2" fontFamily="heading" fontSize="xl" fontWeight="semibold" color="fg.default">
+        <Text
+          as="h2"
+          fontFamily="heading"
+          fontSize="xl"
+          fontWeight="semibold"
+          color="fg.default"
+        >
           Deposit XLM into Vault
         </Text>
         <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1}>
-          Fund this threshold vault. Anyone can deposit without signing authorizations.
+          Fund this threshold vault. Anyone can deposit without signing
+          authorizations.
         </Text>
       </Box>
       <Box as="form" onSubmit={handleSubmit}>
         <Flex direction="column" gap={3}>
           <Flex direction="column" gap={1.5}>
-            <Text fontFamily="body" fontSize="xs" fontWeight="medium" color="fg.default">
+            <Text
+              fontFamily="body"
+              fontSize="xs"
+              fontWeight="medium"
+              color="fg.default"
+            >
               Amount (XLM)
             </Text>
             <Input
@@ -45,7 +75,12 @@ export function DepositForm({ onDeposit }: DepositFormProps) {
               required
             />
           </Flex>
-          <Button type="submit" mt={2} size="md">
+          {error && (
+            <Text color="status.danger" fontSize="xs" mt={1}>
+              {error}
+            </Text>
+          )}
+          <Button type="submit" mt={2} size="md" loading={pending}>
             Deposit XLM
           </Button>
         </Flex>

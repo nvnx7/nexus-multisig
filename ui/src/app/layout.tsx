@@ -39,7 +39,7 @@ export default function RootLayout({
       className={`${ibmPlexSans.variable} ${inter.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
-      <body>
+      <body suppressHydrationWarning>
         <Providers>
           <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
             <Header />

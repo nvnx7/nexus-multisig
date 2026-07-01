@@ -3,6 +3,7 @@ import {
   type FrostSignature,
   buildFullMerkleProof,
   poseidonHash,
+  Note,
 } from "nexus-crypto";
 import { BN254_FIELD, TREE_DEPTH, ZERO_LEAF } from "@/config/constants";
 import {
@@ -10,15 +11,7 @@ import {
   type TransactInput,
   computeExtDataHash,
 } from "@/api/pool/transact";
-import type { OwnedNote } from "@/api/pool/getGroupNotes";
 import { parseVaultAddress } from "@/lib/vaultAddress";
-import {
-  type Note,
-  encryptNote,
-  noteCommitment,
-  noteNullifier,
-  randomSalt,
-} from "./note";
 
 const N_INPUTS = 2;
 
@@ -33,7 +26,7 @@ export type BuildTransactParams = {
   groupSpendPublicKey: Point;
   groupViewPublicKey: Point;
   /** Unspent notes owned by this group. */
-  notes: OwnedNote[];
+  notes: Note[];
   /** All commitments, dense by tree index, gaps = ZERO_LEAF. */
   leaves: bigint[];
   /** Stellar destination for a withdraw. */
@@ -78,23 +71,53 @@ function merkleRoot(leaves: bigint[]): bigint {
   ).root;
 }
 
+/**
+ * Greedy note selection — picks notes in order until `total >= target`.
+ * Used for withdraw and transfer where we need to cover a specific spend amount.
+ */
 function selectInputs(
-  notes: OwnedNote[],
+  notes: Note[],
   target: bigint,
-): { selected: OwnedNote[]; total: bigint } {
-  const selected: OwnedNote[] = [];
+): { selected: Note[]; total: bigint } {
+  const selected: Note[] = [];
   let total = 0n;
   for (const n of notes) {
     if (total >= target) break;
     selected.push(n);
-    total += n.note.amount;
+    total += n.amount;
   }
   return { selected, total };
+}
+
+type InputSlot = { note: Note; real: boolean };
+
+function padInputs(selected: Note[], groupSpendPublicKey: Point): InputSlot[] {
+  const slots: InputSlot[] = selected.map((n) => ({ note: n, real: true }));
+  while (slots.length < N_INPUTS) {
+    slots.push({ note: Note.dummy(groupSpendPublicKey), real: false });
+  }
+  return slots;
 }
 
 /**
  * Collects all witness inputs and builds the `TransactInput` + `ExtData` for a
  * `pool.transact()` call. The aggregate signature is supplied by the caller.
+ *
+ * Transaction semantics:
+ *
+ *   deposit  — Merges up to N_INPUTS of the smallest existing notes with the
+ *              deposited amount into a single output. This consolidates dust
+ *              while adding funds. If there are no existing notes, the two
+ *              input slots are dummy notes.
+ *              conservation: Σ_inputs + deposit_amount = merged_output + 0
+ *
+ *   withdraw — Spends enough notes to cover `amount`, sends it to an external
+ *              Stellar address, and returns change back to the vault.
+ *              conservation: Σ_inputs + (-amount) = change + 0
+ *
+ *   transfer — Spends enough notes to cover `amount`, sends it to another
+ *              shielded vault address, and returns change back to this vault.
+ *              conservation: Σ_inputs + 0 = transferred + change
  */
 export function buildTransactContext(params: BuildTransactParams): {
   input: TransactInput;
@@ -114,89 +137,90 @@ export function buildTransactContext(params: BuildTransactParams): {
     signature,
   } = params;
 
-  // ── input notes (deposit spends none; pad to N_INPUTS with dummies) ────────
-  const spendTarget = type === "deposit" ? 0n : amount;
-  const { selected, total } = selectInputs(notes, spendTarget);
-  if (selected.length > N_INPUTS)
-    throw new Error(`too many input notes required (max ${N_INPUTS})`);
-  if (type !== "deposit" && total < amount)
-    throw new Error("insufficient funds");
-
-  type InputSlot = { note: Note; index: number; real: boolean };
-  const inputs: InputSlot[] = selected.map((n) => ({
-    note: n.note,
-    index: n.index,
-    real: true,
-  }));
-  while (inputs.length < N_INPUTS) {
-    inputs.push({
-      note: { pubkey: groupSpendPublicKey, amount: 0n, salt: randomSalt() },
-      index: 0,
-      real: false,
-    });
-  }
-
   const root = merkleRoot(leaves);
-  const zeroPath = Array(TREE_DEPTH).fill(0n) as bigint[];
 
-  const inCommitments = inputs.map((s) => noteCommitment(s.note));
-  const nullifiers = inputs.map((s, i) =>
-    noteNullifier(inCommitments[i]!, BigInt(s.index)),
-  );
-  const proofs = inputs.map((s, i) =>
-    s.real
-      ? buildFullMerkleProof(TREE_DEPTH, leaves, s.index, ZERO_LEAF)
-      : { root, pathElements: zeroPath, pathIndices: zeroPath },
-  );
+  const selfNote = (amt: bigint) => Note.random(groupSpendPublicKey, amt);
 
-  // ── outputs by type (conservation: sum_in + public_amount == sum_out) ──────
-  const change = total - amount;
+  let inputs: InputSlot[];
   let publicAmount: bigint;
   let extAmount: bigint;
   let recipient: string;
   let out0: { note: Note; encKey: Point };
   let out1: { note: Note; encKey: Point };
 
-  const selfNote = (amt: bigint): Note => ({
-    pubkey: groupSpendPublicKey,
-    amount: amt,
-    salt: randomSalt(),
-  });
-
   if (type === "deposit") {
+    // Pick smallest notes to merge
+    const smallest = [...notes]
+      .sort((a, b) => (a.amount < b.amount ? -1 : 1))
+      .slice(0, N_INPUTS);
+
+    const mergedTotal = smallest.reduce((s, n) => s + n.amount, 0n);
+
+    inputs = padInputs(smallest, groupSpendPublicKey);
     publicAmount = amount;
     extAmount = amount;
     recipient = sender;
-    out0 = { note: selfNote(amount), encKey: groupViewPublicKey };
+    out0 = { note: selfNote(mergedTotal + amount), encKey: groupViewPublicKey };
     out1 = { note: selfNote(0n), encKey: groupViewPublicKey };
   } else if (type === "withdraw") {
-    if (!withdrawRecipient) throw new Error("withdraw requires a recipient address");
+    if (!withdrawRecipient)
+      throw new Error("withdraw requires a recipient address");
+
+    const { selected, total } = selectInputs(notes, amount);
+    if (selected.length > N_INPUTS)
+      throw new Error(`too many input notes required (max ${N_INPUTS})`);
+    if (total < amount) throw new Error("insufficient funds");
+
+    const change = total - amount;
+    inputs = padInputs(selected, groupSpendPublicKey);
     publicAmount = BN254_FIELD - amount; // field-negative
     extAmount = -amount;
     recipient = withdrawRecipient;
     out0 = { note: selfNote(change), encKey: groupViewPublicKey };
     out1 = { note: selfNote(0n), encKey: groupViewPublicKey };
   } else {
-    if (!recipientAddress) throw new Error("transfer requires a recipient vault address");
+    // transfer
+    if (!recipientAddress)
+      throw new Error("transfer requires a recipient vault address");
+
+    const { selected, total } = selectInputs(notes, amount);
+    if (selected.length > N_INPUTS)
+      throw new Error(`too many input notes required (max ${N_INPUTS})`);
+    if (total < amount) throw new Error("insufficient funds");
+
+    const change = total - amount;
     const recip = parseVaultAddress(recipientAddress);
+    inputs = padInputs(selected, groupSpendPublicKey);
     publicAmount = 0n;
     extAmount = 0n;
     recipient = sender;
     out0 = {
-      note: { pubkey: recip.groupSpendPublicKey, amount, salt: randomSalt() },
+      note: Note.random(recip.groupSpendPublicKey, amount),
       encKey: recip.groupViewPublicKey,
     };
     out1 = { note: selfNote(change), encKey: groupViewPublicKey };
   }
 
+  // ── Build witness ─────────────────────────────────────────────────────────
+
+  const zeroPath = Array<bigint>(TREE_DEPTH).fill(0n);
+  const nullifiers = inputs.map((s) =>
+    s.note.nullifier(BigInt(s.note.index ?? 0)),
+  );
+  const proofs = inputs.map((s) =>
+    s.real
+      ? buildFullMerkleProof(TREE_DEPTH, leaves, s.note.index!, ZERO_LEAF)
+      : { root, pathElements: zeroPath, pathIndices: zeroPath },
+  );
+
   const outputs = [out0, out1];
-  const outputCommitments = outputs.map((o) => noteCommitment(o.note));
+  const outputCommitments = outputs.map((o) => o.note.commitment());
 
   const extData: ExtData = {
     recipient,
     ext_amount: extAmount,
-    encrypted_output0: encryptNote(out0.note, out0.encKey),
-    encrypted_output1: encryptNote(out1.note, out1.encKey),
+    encrypted_output0: out0.note.encrypt(out0.encKey),
+    encrypted_output1: out1.note.encrypt(out1.encKey),
   };
   const extDataHash = computeExtDataHash(extData);
   const msg = deriveTransactMsg({
@@ -216,7 +240,7 @@ export function buildTransactContext(params: BuildTransactParams): {
     agg_pubkey: [groupSpendPublicKey.x, groupSpendPublicKey.y],
     amounts: inputs.map((s) => s.note.amount),
     salts: inputs.map((s) => s.note.salt),
-    note_indices: inputs.map((s) => BigInt(s.index)),
+    note_indices: inputs.map((s) => BigInt(s.note.index ?? 0)),
     path_elements: proofs.map((p) => p.pathElements),
     path_indices: proofs.map((p) => p.pathIndices),
     output_pubkeys: [

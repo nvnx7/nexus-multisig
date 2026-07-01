@@ -1,20 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { scValToNative } from "@stellar/stellar-sdk";
-import { getRpcServer } from "@/api/rpc";
+import { getRpcServer, getEarliestLedger } from "@/api/rpc";
 import { POOL_CONTRACT_ID_LOCAL } from "@/config/constants";
 import { getCommitments } from "./getCommitments";
 import type { GroupDetail } from "@/api/groups/getGroup";
-import {
-  decryptNote,
-  noteCommitment,
-  noteNullifier,
-  type Note,
-} from "@/lib/tx/note";
-
-export type OwnedNote = { note: Note; index: number };
+import { Note } from "nexus-crypto";
 
 /** Set of nullifiers already spent on-chain (from NewNullifierEvent). */
-async function getSpentNullifiers(startLedger = 1): Promise<Set<string>> {
+async function getSpentNullifiers(startLedger: number): Promise<Set<string>> {
   const server = getRpcServer();
   const res = await server.getEvents({
     startLedger,
@@ -43,26 +36,28 @@ export async function getGroupNotes(params: {
   group: GroupDetail;
   gvk: bigint;
   startLedger?: number;
-}): Promise<OwnedNote[]> {
+}): Promise<Note[]> {
   const { group, gvk, startLedger } = params;
   const ownerPubkey = {
     x: BigInt(group.group_pubkey[0]),
     y: BigInt(group.group_pubkey[1]),
   };
 
+  const ledger = startLedger ?? await getEarliestLedger(getRpcServer());
   const [commitments, spent] = await Promise.all([
-    getCommitments(startLedger),
-    getSpentNullifiers(startLedger),
+    getCommitments(ledger),
+    getSpentNullifiers(ledger),
   ]);
 
-  const owned: OwnedNote[] = [];
+  const owned: Note[] = [];
   for (const rec of commitments) {
     if (!rec.encrypted_output) continue;
-    const note = decryptNote(rec.encrypted_output, gvk, ownerPubkey);
-    if (!note || noteCommitment(note) !== BigInt(rec.commitment)) continue;
-    const nullifier = noteNullifier(BigInt(rec.commitment), BigInt(rec.index));
+    const note = Note.decrypt(rec.encrypted_output, gvk, ownerPubkey);
+    if (!note || note.commitment() !== BigInt(rec.commitment)) continue;
+    const nullifier = note.nullifier(BigInt(rec.index));
     if (spent.has(nullifier.toString())) continue;
-    owned.push({ note, index: rec.index });
+    note.index = rec.index;
+    owned.push(note);
   }
   return owned;
 }

@@ -8,6 +8,23 @@ import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit";
 import { rpcUrl, passphraseNetwork } from "@/config/env";
 
 /**
+ * Returns the earliest ledger available from the RPC node.
+ * On testnet we estimate (latestLedger - 17,000); on a short-lived local
+ * network that undershoots, we read oldestLedger directly from the response.
+ */
+export async function getEarliestLedger(server: Server): Promise<number> {
+  const { sequence: latestLedger } = await server.getLatestLedger();
+  const estimated = latestLedger - 17_000;
+  if (estimated >= 1) return estimated;
+  const probe = await server.getEvents({
+    startLedger: latestLedger,
+    filters: [],
+    limit: 1,
+  });
+  return probe.oldestLedger;
+}
+
+/**
  * Soroban RPC client. Allows plain http so the local network endpoint
  * (http://localhost:8000/rpc) works; https (testnet) is unaffected.
  */
@@ -23,10 +40,23 @@ export async function signAndSubmit(
   unsignedXdr: string,
   address: string,
 ): Promise<string> {
-  const { signedTxXdr } = await StellarWalletsKit.signTransaction(unsignedXdr, {
-    address,
-    networkPassphrase: passphraseNetwork,
-  });
+  let signedTxXdr: string;
+  try {
+    const result = await StellarWalletsKit.signTransaction(unsignedXdr, {
+      address,
+      networkPassphrase: passphraseNetwork,
+    });
+    signedTxXdr = result.signedTxXdr;
+  } catch (e) {
+    console.error("[signAndSubmit] wallet signing failed:", e);
+    const msg =
+      e instanceof Error
+        ? e.message
+        : typeof e === "object" && e !== null && "message" in e
+          ? String((e as { message: unknown }).message)
+          : "Wallet signing failed";
+    throw new Error(msg);
+  }
 
   const server = getRpcServer();
   const signedTx = new Transaction(

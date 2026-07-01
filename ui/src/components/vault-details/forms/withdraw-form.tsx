@@ -1,17 +1,21 @@
+"use client";
+
 import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { Box, Button, Flex, Input, Text } from "@chakra-ui/react";
+import { useGroupShieldedWallet } from "@/hooks/useGroupShieldedWallet";
+import { parseXLM } from "@/utils/token";
 
-interface WithdrawFormProps {
-  balance: number;
-  onPropose: (recipient: string, amount: number) => void;
-}
-
-export function WithdrawForm({ balance, onPropose }: WithdrawFormProps) {
-  const [recipient, setRecipient] = useState<string>("");
-  const [amount, setAmount] = useState<string>("");
+export function WithdrawForm() {
+  const { vaultAddress } = useParams<{ vaultAddress: string }>();
+  const { balance, proposeTx: propose } = useGroupShieldedWallet(vaultAddress);
+  const router = useRouter();
+  const [recipient, setRecipient] = useState("");
+  const [amount, setAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault();
     setError(null);
 
@@ -20,36 +24,62 @@ export function WithdrawForm({ balance, onPropose }: WithdrawFormProps) {
       return;
     }
 
-    const amt = parseFloat(amount);
-    if (isNaN(amt) || amt <= 0) {
+    let amtStroops: bigint;
+    try {
+      amtStroops = parseXLM(amount);
+      if (amtStroops <= 0n) throw new Error();
+    } catch {
       setError("Please enter a valid withdrawal amount.");
       return;
     }
 
-    if (amt > balance) {
+    if (balance !== null && amtStroops > balance) {
       setError("Insufficient vault balance.");
       return;
     }
 
-    onPropose(recipient, amt);
-    setRecipient("");
-    setAmount("");
+    setPending(true);
+    try {
+      const id = await propose({
+        type: "withdraw",
+        amount: amtStroops,
+        withdrawRecipient: recipient,
+      });
+      router.push(`/vault/${vaultAddress}/session/${id}`);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to propose withdrawal",
+      );
+      setPending(false);
+    }
   };
 
   return (
     <Flex direction="column" gap={4}>
       <Box>
-        <Text as="h2" fontFamily="heading" fontSize="xl" fontWeight="semibold" color="fg.default">
+        <Text
+          as="h2"
+          fontFamily="heading"
+          fontSize="xl"
+          fontWeight="semibold"
+          color="fg.default"
+        >
           Initiate Multisig Withdrawal
         </Text>
         <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1}>
-          Propose a withdrawal from this vault. This transaction requires co-signer approvals to execute.
+          Propose a withdrawal from this vault. This transaction requires
+          co-signer approvals to execute.
         </Text>
       </Box>
       <Box as="form" onSubmit={handleSubmit}>
         <Flex direction="column" gap={3}>
           <Flex direction="column" gap={1.5}>
-            <Text fontFamily="body" fontSize="xs" fontWeight="medium" color="fg.default">
+            <Text
+              fontFamily="body"
+              fontSize="xs"
+              fontWeight="medium"
+              color="fg.default"
+            >
               Destination Stellar Address
             </Text>
             <Input
@@ -63,7 +93,12 @@ export function WithdrawForm({ balance, onPropose }: WithdrawFormProps) {
             />
           </Flex>
           <Flex direction="column" gap={1.5}>
-            <Text fontFamily="body" fontSize="xs" fontWeight="medium" color="fg.default">
+            <Text
+              fontFamily="body"
+              fontSize="xs"
+              fontWeight="medium"
+              color="fg.default"
+            >
               Amount (XLM)
             </Text>
             <Input
@@ -78,14 +113,12 @@ export function WithdrawForm({ balance, onPropose }: WithdrawFormProps) {
               required
             />
           </Flex>
-
           {error && (
             <Text color="status.danger" fontSize="xs" mt={1}>
               {error}
             </Text>
           )}
-
-          <Button type="submit" mt={2} size="md">
+          <Button type="submit" mt={2} size="md" loading={pending}>
             Propose Withdrawal
           </Button>
         </Flex>

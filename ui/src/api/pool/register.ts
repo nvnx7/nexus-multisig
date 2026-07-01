@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import type { Account } from "bindings";
 import { getPoolClient } from "@/api/contract";
 import { getShieldedAddress } from "./getShieldedAddress";
-import type { ShieldedAddress } from "@/lib/shielded";
+import type { ShieldedAddress } from "nexus-crypto";
 
 export async function isRegistered(stellarAddress: string): Promise<boolean> {
   return (await getShieldedAddress(stellarAddress)) !== null;
@@ -13,7 +13,7 @@ export async function isRegistered(stellarAddress: string): Promise<boolean> {
 export async function registerShieldedAddress(params: {
   owner: string;
   shieldedAddress: ShieldedAddress;
-}): Promise<void> {
+}) {
   const { owner, shieldedAddress } = params;
   const account: Account = {
     owner,
@@ -22,11 +22,9 @@ export async function registerShieldedAddress(params: {
   };
 
   const client = getPoolClient(owner, true);
-  console.log("Tx sending");
   const tx = await client.register({ account });
-  console.log("Tx", tx);
-  const res = await tx.signAndSend();
-  console.log("Res", res);
+  const sendTxRes = await tx.signAndSend();
+  return sendTxRes;
 }
 
 export function useRegisterShieldedAddress() {

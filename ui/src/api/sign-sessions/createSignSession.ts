@@ -1,18 +1,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { SerializedNonceCommitments } from "nexus-crypto";
 import coordinatorClient from "@/api/coordinator";
-
-/** High-level UTXO transaction proposal. */
-export type TxProposal = {
-  type: "deposit" | "withdraw" | "transfer";
-  amount: string;
-  recipient?: string;
-};
+import type { TxDetails } from "@/lib/tx/txDetails";
 
 export async function createSignSession(params: {
   group_address: string;
   proposer: string;
-  tx: TxProposal;
+  /** The fully-pinned transaction (witness + ext_data). */
+  tx_details: TxDetails;
+  /** The signing message = deriveTransactMsg(...), as a decimal string. */
+  tx_hash: string;
   nonce_commitment: SerializedNonceCommitments;
   enc_nonces: string;
 }): Promise<{ id: string }> {

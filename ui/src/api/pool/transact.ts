@@ -7,22 +7,8 @@
  *   3. Return assembled transaction XDR; caller signs via wallet kit and submits
  */
 
-// snarkjs ships no .d.ts — import as any
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { groth16 } = require("snarkjs") as {
-  groth16: {
-    fullProve(
-      input: Record<string, unknown>,
-      wasmPath: string,
-      zkeyPath: string,
-    ): Promise<{
-      proof: { pi_a: string[]; pi_b: string[][]; pi_c: string[] };
-      publicSignals: string[];
-    }>;
-  };
-};
-
-import { Address, xdr } from "@stellar/stellar-sdk";
+import { generateSnarkProof } from "nexus-crypto";
+import { Address, TransactionBuilder, xdr } from "@stellar/stellar-sdk";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import type { Proof, ExtData as ContractExtData } from "bindings";
 import { getPoolClient } from "@/api/contract";
@@ -82,24 +68,20 @@ function writeBE32(n: bigint, buf: Uint8Array, offset: number): void {
   }
 }
 
-/** Encode a snarkjs G1 point ([x_dec, y_dec, "1"]) → 64 bytes (x||y BE). */
-function encodeG1(pt: string[]): Buffer {
+function encodeG1(pt: [bigint, bigint]): Buffer {
   const buf = new Uint8Array(64);
-  writeBE32(BigInt(pt[0]!), buf, 0);
-  writeBE32(BigInt(pt[1]!), buf, 32);
+  writeBE32(pt[0], buf, 0);
+  writeBE32(pt[1], buf, 32);
   return Buffer.from(buf);
 }
 
-/**
- * Encode a snarkjs G2 point ([[x_c0, x_c1], [y_c0, y_c1], ...]) → 128 bytes.
- * snarkjs uses [real(c0), imaginary(c1)]; Soroban stores imaginary(c1)||real(c0).
- */
-function encodeG2(pt: string[][]): Buffer {
+// snarkjs uses [real(c0), imaginary(c1)]; Soroban stores imaginary(c1)||real(c0).
+function encodeG2(pt: [[bigint, bigint], [bigint, bigint]]): Buffer {
   const buf = new Uint8Array(128);
-  writeBE32(BigInt(pt[0]![1]!), buf, 0); // x imaginary (c1)
-  writeBE32(BigInt(pt[0]![0]!), buf, 32); // x real      (c0)
-  writeBE32(BigInt(pt[1]![1]!), buf, 64); // y imaginary (c1)
-  writeBE32(BigInt(pt[1]![0]!), buf, 96); // y real      (c0)
+  writeBE32(pt[0][1], buf, 0); // x imaginary (c1)
+  writeBE32(pt[0][0], buf, 32); // x real      (c0)
+  writeBE32(pt[1][1], buf, 64); // y imaginary (c1)
+  writeBE32(pt[1][0], buf, 96); // y real      (c0)
   return Buffer.from(buf);
 }
 
@@ -164,12 +146,6 @@ function buildExtDataScVal(extData: ExtData): xdr.ScVal {
 
 /**
  * Compute `ext_data_hash` exactly as the pool contract does:
- *   keccak256(xdr(ext_data)) reduced modulo the BN254 scalar field.
- *
- * Call this BEFORE running FROST: the result is folded into the signed message
- * (see deriveTransactMsg) and becomes the `ext_data_hash` public input of the
- * proof, so the threshold group authorises the external data (e.g. the
- * withdrawal recipient).
  */
 export function computeExtDataHash(extData: ExtData): bigint {
   const payload = buildExtDataScVal(extData).toXDR(); // canonical XDR bytes
@@ -191,11 +167,7 @@ export async function buildTransactTx(
   senderAddress: string,
   input: TransactInput,
   extData: ExtData,
-): Promise<string> {
-  // 0. Recompute ext_data_hash from extData and confirm it matches the value
-  //    baked into the witness (and therefore the FROST signature). A mismatch
-  //    means the witness was signed over different external data — the proof
-  //    would fail on-chain, so fail fast with a clear error instead.
+) {
   const extDataHash = computeExtDataHash(extData);
   if (extDataHash !== input.ext_data_hash) {
     throw new Error(
@@ -203,21 +175,23 @@ export async function buildTransactTx(
     );
   }
 
-  // 1. Generate ZK proof from circuit artifacts in /public/
-  const { proof } = await groth16.fullProve(
-    input as unknown as Record<string, unknown>,
-    "/main.wasm",
-    "/main.zkey",
-  );
+  // Generate proof
+  const snarkJs = (globalThis as any).snarkjs;
+  if (!snarkJs) throw new Error("snarkjs not found on globalThis");
+  const { proof } = await generateSnarkProof({
+    snarkJs,
+    inputs: input as any,
+    circuit: { wasm: "/main.wasm", zkey: "/main.zkey" },
+  });
 
   // 2. Assemble the typed contract arguments. The bindings encode these to XDR
   //    (matching the contract's struct layout); we only encode the Groth16
   //    proof points (A: G1 64B, B: G2 128B, C: G1 64B) and the field elements.
   const proofArg: Proof = {
     proof: {
-      a: encodeG1(proof.pi_a),
-      b: encodeG2(proof.pi_b),
-      c: encodeG1(proof.pi_c),
+      a: encodeG1(proof.a),
+      b: encodeG2(proof.b),
+      c: encodeG1(proof.c),
     },
     root: input.root,
     input_nullifiers: input.nullifiers,
@@ -237,13 +211,13 @@ export async function buildTransactTx(
 
   // 3. Build + simulate via the bindings client. Return the assembled (prepared)
   //    XDR so the caller can sign it with the wallet and submit (see useTransact).
-  const client = getPoolClient(senderAddress);
-  const assembled = await client.transact({
+  const client = getPoolClient(senderAddress, true);
+  const tx = await client.transact({
     proof: proofArg,
     ext_data: extDataArg,
     sender: senderAddress,
   });
-  return assembled.toXDR();
+  return tx;
 }
 
 // ── Utility ──────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { scValToNative } from "@stellar/stellar-sdk";
 import { getRpcServer } from "@/api/rpc";
 import { POOL_CONTRACT_ID_LOCAL } from "@/config/constants";
-import { ShieldedAddress } from "@/lib/shielded";
+import { ShieldedAddress } from "nexus-crypto";
 import { babyjubjub as bbj } from "@noble/curves/misc.js";
 import { useQuery } from "@tanstack/react-query";
 import { EdwardsPoint } from "@noble/curves/abstract/edwards.js";
