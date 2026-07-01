@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Box, Button, Flex, Separator, Spinner, Text } from "@chakra-ui/react";
 import { Copy, Check, Send, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { formatXLM } from "@/utils/token";
+import { useGetXLMPrice } from "@/api/price";
 
 interface Member {
   address: string;
@@ -56,6 +57,7 @@ export function VaultInfoPanel({
   userAddress,
 }: VaultInfoPanelProps) {
   const [copied, setCopied] = useState(false);
+  const { data: xlmPrice } = useGetXLMPrice();
 
   function handleCopy() {
     onCopyAddress();
@@ -176,26 +178,40 @@ export function VaultInfoPanel({
             </Text>
           </Flex>
         ) : (
-          <Flex align="baseline" gap={2} mt={0.5}>
-            <Text
-              fontFamily="heading"
-              fontSize="4xl"
-              fontWeight="bold"
-              color="white"
-              letterSpacing="-0.02em"
-              lineHeight={1}
-            >
-              {formatXLM(balance ?? 0n)}
-            </Text>
-            <Text
-              fontFamily="mono"
-              fontSize="sm"
-              color="brand.text"
-              fontWeight="medium"
-            >
-              XLM
-            </Text>
-          </Flex>
+          <>
+            <Flex align="baseline" gap={2} mt={0.5}>
+              <Text
+                fontFamily="heading"
+                fontSize="4xl"
+                fontWeight="bold"
+                color="white"
+                letterSpacing="-0.02em"
+                lineHeight={1}
+              >
+                {formatXLM(balance ?? 0n)}
+              </Text>
+              <Text
+                fontFamily="mono"
+                fontSize="sm"
+                color="brand.text"
+                fontWeight="medium"
+              >
+                XLM
+              </Text>
+            </Flex>
+            {xlmPrice != null && balance !== null && (
+              <Text
+                fontFamily="mono"
+                fontSize="xs"
+                color="brand.text"
+                opacity={0.7}
+                mt={1}
+              >
+                {"≈ $"}
+                {(parseFloat(formatXLM(balance)) * xlmPrice).toFixed(2)} USD
+              </Text>
+            )}
+          </>
         )}
       </Flex>
 
@@ -266,7 +282,7 @@ export function VaultInfoPanel({
                     {m.address === userAddress && (
                       <Text as="span" color="brand.text" fontWeight="medium">
                         {" "}
-                        · you
+                        (You)
                       </Text>
                     )}
                   </Text>
