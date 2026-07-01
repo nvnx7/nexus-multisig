@@ -1,6 +1,7 @@
 "use client";
 
-import { Badge, Box, Flex, Text } from "@chakra-ui/react";
+import { Box, Flex, Text } from "@chakra-ui/react";
+import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export interface MultisigGroup {
@@ -13,42 +14,55 @@ export interface MultisigGroup {
 
 export function MultisigCard({ group }: { group: MultisigGroup }) {
   const router = useRouter();
-  const short = `${group.group_address.slice(0, 10)}…${group.group_address.slice(-8)}`;
+  const short = `${group.group_address.slice(0, 12)}…${group.group_address.slice(-8)}`;
 
   return (
     <Box
-      borderWidth={1}
+      borderWidth="1px"
       borderColor="border.default"
-      rounded="md"
+      rounded="xl"
       bg="bg.default"
       cursor="pointer"
-      transition="background-color 0.15s"
-      _hover={{ bg: "bg.subtle", boxShadow: "shadow.hover" }}
+      transition="border-color 0.15s, background 0.15s"
+      _hover={{ borderColor: "border.emphasis", bg: "bg.subtle" }}
       onClick={() => router.push(`/vault/${group.group_address}`)}
     >
-      <Flex align="center" justify="space-between" gap={4} px={4} py={3}>
-        <Flex direction="column" gap={0.5} minW={0} flex={1}>
+      <Flex align="center" gap={3.5} px={4} py={3.5}>
+        {/* Icon */}
+        <Flex
+          w={9}
+          h={9}
+          bg="brand.subtle"
+          borderRadius="lg"
+          align="center"
+          justify="center"
+          flexShrink={0}
+        >
           <Text
             fontFamily="mono"
             fontSize="xs"
-            color="fg.default"
-            truncate
+            color="brand.solid"
+            userSelect="none"
+            aria-hidden="true"
           >
-            {short}
-          </Text>
-          <Text fontFamily="body" fontSize="xs" color="fg.muted">
-            {group.threshold} of {group.total} · requires {group.threshold} signatures
+            ✦
           </Text>
         </Flex>
-        <Badge
-          variant="subtle"
-          colorPalette="green"
-          fontFamily="mono"
-          fontSize="2xs"
-          flexShrink={0}
-        >
-          {group.threshold}-of-{group.total}
-        </Badge>
+
+        {/* Info */}
+        <Flex direction="column" gap={0.5} flex={1} minW={0}>
+          <Text fontFamily="mono" fontSize="xs" color="fg.default" fontWeight="medium" truncate>
+            {short}
+          </Text>
+          <Text fontFamily="body" fontSize="2xs" color="fg.muted">
+            {group.threshold}-of-{group.total} · threshold vault
+          </Text>
+        </Flex>
+
+        {/* Arrow */}
+        <Box color="fg.muted" flexShrink={0}>
+          <ChevronRight size={15} />
+        </Box>
       </Flex>
     </Box>
   );

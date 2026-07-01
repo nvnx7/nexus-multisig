@@ -1,6 +1,7 @@
 "use client";
 
 import { useWallet } from "@/context/wallet-context";
+import { useNativeBalance } from "@/api/account";
 import { Box, Button, Flex, HStack, Text } from "@chakra-ui/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -30,6 +31,8 @@ export function Header() {
   const shortAddress = stellarAddress
     ? `${stellarAddress.slice(0, 6)}…${stellarAddress.slice(-4)}`
     : null;
+
+  const { data: nativeBalance } = useNativeBalance(stellarAddress);
 
   function handleDisconnect() {
     disconnect();
@@ -124,7 +127,7 @@ export function Header() {
           {stellarAddress ? (
             <>
               <HStack
-                gap={2}
+                gap={2.5}
                 px={3}
                 py={1.5}
                 bg="bg.subtle"
@@ -136,15 +139,20 @@ export function Header() {
                 <Text fontFamily="mono" fontSize="2xs" color="fg.default" letterSpacing="0.01em">
                   {shortAddress}
                 </Text>
+                {nativeBalance != null && (
+                  <>
+                    <Box w="1px" h={3} bg="border.default" />
+                    <Text fontFamily="mono" fontSize="2xs" color="fg.muted">
+                      {nativeBalance} XLM
+                    </Text>
+                  </>
+                )}
               </HStack>
               <Button
                 size="xs"
-                variant="ghost"
-                color="fg.muted"
+                variant="solid"
                 fontFamily="body"
                 fontSize="xs"
-                px={2.5}
-                _hover={{ color: "fg.default", bg: "bg.subtle" }}
                 onClick={handleDisconnect}
               >
                 Disconnect
