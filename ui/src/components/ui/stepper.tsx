@@ -118,7 +118,7 @@ export function Stepper({ steps, currentStep }: StepperProps) {
           borderWidth={1}
           borderColor="border.default"
           p={8}
-          boxShadow="shadow.surface"
+          boxShadow="surface"
         >
           {activeStep.content}
         </Box>

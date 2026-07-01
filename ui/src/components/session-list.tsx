@@ -33,9 +33,10 @@ function SessionCard({ session }: { session: UserDkgSessionSummary }) {
       borderColor="border.default"
       rounded="xl"
       bg="bg.default"
+      boxShadow="surface"
       cursor="pointer"
-      transition="border-color 0.15s, background 0.15s"
-      _hover={{ borderColor: "border.emphasis", bg: "bg.subtle" }}
+      transition="border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.15s"
+      _hover={{ borderColor: "border.emphasis", boxShadow: "hover", transform: "translateY(-1px)" }}
       onClick={() => router.push(`/vault/new/${session.id}`)}
     >
       <Flex align="center" gap={3.5} px={4} py={3.5}>

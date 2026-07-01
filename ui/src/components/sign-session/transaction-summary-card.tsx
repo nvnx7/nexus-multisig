@@ -62,6 +62,7 @@ export function TransactionSummaryCard({
         borderColor="border.default"
         rounded="xl"
         bg="bg.default"
+        boxShadow="surface"
         px={6}
         py={5}
         mb={4}
@@ -82,6 +83,7 @@ export function TransactionSummaryCard({
         borderColor="border.default"
         rounded="xl"
         bg="bg.default"
+        boxShadow="surface"
         px={5}
         mb={4}
       >

@@ -6,6 +6,38 @@ import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
  */
 
 const config = defineConfig({
+  // ── Global base styles ─────────────────────────────────────────────────────
+  globalCss: {
+    "html, body": {
+      bg: "bg.canvas",
+      color: "fg.default",
+      fontFamily: "body",
+      fontFeatureSettings: '"cv11", "ss01"',
+      textRendering: "optimizeLegibility",
+    },
+    "::selection": {
+      bg: "brand.solid",
+      color: "white",
+    },
+    // Refined, unobtrusive scrollbars
+    "*::-webkit-scrollbar": {
+      width: "10px",
+      height: "10px",
+    },
+    "*::-webkit-scrollbar-track": {
+      bg: "transparent",
+    },
+    "*::-webkit-scrollbar-thumb": {
+      bg: "border.emphasized",
+      borderRadius: "full",
+      border: "3px solid transparent",
+      backgroundClip: "content-box",
+    },
+    "*::-webkit-scrollbar-thumb:hover": {
+      bg: "fg.subtle",
+    },
+  },
+
   theme: {
     tokens: {
       colors: {
@@ -55,6 +87,10 @@ const config = defineConfig({
         "brand.text": { value: "{colors.green.300}" },            // muted green text on dark
         "brand.inverseText": { value: "{colors.green.200}" },     // lighter for inverse surfaces
 
+        // Surface tokens
+        "bg.canvas": { value: "#f4f7f5" },                        // soft green-tinted app background
+        "fg.onPrimary": { value: "{colors.white}" },              // text/icons on brand.solid surfaces
+
         // Border overrides
         "border.emphasis": { value: "{colors.green.300}" },
 
@@ -65,6 +101,20 @@ const config = defineConfig({
         "status.warningBg": { value: "#fef3c7" },
         "status.danger": { value: "{colors.danger.500}" },
         "status.dangerBg": { value: "{colors.danger.50}" },
+      },
+      shadows: {
+        // Brand-tinted, layered elevations for a soft, premium feel
+        surface: {
+          value: "0px 1px 2px rgba(0, 47, 31, 0.04), 0px 2px 6px rgba(0, 47, 31, 0.05)",
+        },
+        hover: {
+          value: "0px 4px 12px rgba(0, 47, 31, 0.10), 0px 2px 5px rgba(0, 47, 31, 0.06)",
+        },
+      },
+      radii: {
+        // Soften the global control radius (buttons, inputs use l2)
+        l2: { value: "{radii.md}" },
+        l3: { value: "{radii.lg}" },
       },
     },
     recipes: {

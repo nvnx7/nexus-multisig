@@ -114,6 +114,7 @@ export function CeremonyProgressCard({
       borderColor="border.default"
       rounded="xl"
       bg="bg.default"
+      boxShadow="surface"
       px={5}
       py={4}
       mb={4}

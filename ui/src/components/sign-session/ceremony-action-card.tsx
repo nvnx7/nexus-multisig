@@ -101,6 +101,7 @@ export function CeremonyActionCard({
       borderColor="border.default"
       rounded="xl"
       bg="bg.default"
+      boxShadow="surface"
       px={5}
       py={5}
     >
