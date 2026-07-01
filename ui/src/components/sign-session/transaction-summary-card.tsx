@@ -119,14 +119,9 @@ export function TransactionSummaryCard({
           >
             {meta.icon}
           </Flex>
-          <Box minW={0}>
-            <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default" lineHeight={1.2}>
-              {meta.label}
-            </Text>
-            <Text fontFamily="mono" fontSize="2xs" color="fg.muted">
-              Session {session.id.slice(0, 10)}…
-            </Text>
-          </Box>
+          <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
+            {meta.label}
+          </Text>
         </Flex>
         <StatusPill label={status.label} palette={status.palette} live={status.live} done={done} />
       </Flex>
@@ -138,48 +133,36 @@ export function TransactionSummaryCard({
         gap={1}
         py={7}
         px={6}
-        bg="brand.emphasis"
-        position="relative"
-        overflow="hidden"
+        bg="bg.subtle"
+        borderTopWidth={1}
+        borderBottomWidth={1}
+        borderColor="border.subtle"
       >
-        {/* faint radial glow */}
-        <Box
-          position="absolute"
-          top="-40%"
-          left="50%"
-          transform="translateX(-50%)"
-          w="140%"
-          h="180%"
-          bg="radial-gradient(ellipse at center, rgba(126,181,154,0.14) 0%, transparent 60%)"
-          pointerEvents="none"
-        />
         <Text
           fontFamily="mono"
           fontSize="9px"
           letterSpacing="0.18em"
           textTransform="uppercase"
-          color="brand.text"
-          opacity={0.7}
-          zIndex={1}
+          color="fg.subtle"
         >
           Amount
         </Text>
-        <Flex align="baseline" gap={2} zIndex={1}>
+        <Flex align="baseline" gap={2}>
           <Text
             fontFamily="heading"
             fontSize="5xl"
             fontWeight="bold"
-            color="white"
+            color="fg.default"
             letterSpacing="-0.03em"
             lineHeight={1}
           >
             {txAmount(d)}
           </Text>
-          <Text fontFamily="mono" fontSize="md" fontWeight="medium" color="brand.text">
+          <Text fontFamily="mono" fontSize="md" fontWeight="medium" color="fg.muted">
             XLM
           </Text>
         </Flex>
-        <Text fontFamily="body" fontSize="xs" color="brand.text" opacity={0.85} zIndex={1}>
+        <Text fontFamily="body" fontSize="xs" color="fg.muted">
           {meta.label} · {txRecipientLabel(d).replace(/^To /, "to ")}
         </Text>
       </Flex>
@@ -188,8 +171,7 @@ export function TransactionSummaryCard({
       <Box px={5} py={1}>
         <DetailRow label={txRecipientLabel(d)} value={txRecipient(d, vaultAddress)} copyable />
         <DetailRow label="Proposed by" value={session.proposer} copyable />
-        <DetailRow label="Session ID" value={session.id} copyable />
-        <DetailRow label="Tx hash" value={session.tx_hash} copyable />
+        <DetailRow label="Transaction" value={session.tx_hash} copyable />
       </Box>
     </Box>
   );

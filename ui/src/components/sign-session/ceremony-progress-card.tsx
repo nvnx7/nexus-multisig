@@ -209,10 +209,10 @@ export function CeremonyProgressCard({
           fontWeight="semibold"
           color="fg.default"
         >
-          FROST Signing Ceremony
+          Signing Progress
         </Text>
         <Text fontFamily="mono" fontSize="9px" letterSpacing="0.1em" textTransform="uppercase" color="fg.subtle">
-          Threshold {session.threshold}
+          {session.threshold} signatures needed
         </Text>
       </Flex>
 

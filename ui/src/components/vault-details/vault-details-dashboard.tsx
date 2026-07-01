@@ -16,15 +16,24 @@ function txAmount(d: TxDetails): string {
   return formatXLM(BigInt(d.output_notes[0]!.amount));
 }
 
+type VaultTab = "deposit" | "withdraw" | "transfer";
+
 interface VaultDetailsDashboardProps {
   vaultAddress: string;
+  initialTab?: string;
 }
 
-export function VaultDetailsDashboard({ vaultAddress }: VaultDetailsDashboardProps) {
+function isVaultTab(v: string | undefined): v is VaultTab {
+  return v === "deposit" || v === "withdraw" || v === "transfer";
+}
+
+export function VaultDetailsDashboard({ vaultAddress, initialTab }: VaultDetailsDashboardProps) {
   const router = useRouter();
   const { stellarAddress } = useWallet();
 
-  const [activeTab, setActiveTab] = useState<"deposit" | "withdraw" | "transfer">("deposit");
+  const [activeTab, setActiveTab] = useState<VaultTab>(
+    isVaultTab(initialTab) ? initialTab : "deposit",
+  );
   const [notification, setNotification] = useState<{
     message: string;
     type: "success" | "info" | "error";

@@ -14,9 +14,9 @@ export function txRecipient(d: TxDetails, vaultAddress: string): string {
 }
 
 export function txRecipientLabel(d: TxDetails): string {
-  if (d.type === "deposit") return "To (vault)";
-  if (d.type === "withdraw") return "To (Stellar)";
-  return "To (shielded)";
+  if (d.type === "deposit") return "To vault";
+  if (d.type === "withdraw") return "To Stellar address";
+  return "To vault";
 }
 
 export const TX_META: Record<
@@ -36,6 +36,6 @@ export const TX_META: Record<
   transfer: {
     icon: <ArrowRight size={20} />,
     color: "blue",
-    label: "Shielded Transfer",
+    label: "Transfer",
   },
 };
