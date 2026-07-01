@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Box, Button, Flex, Text } from "@chakra-ui/react";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Lock } from "lucide-react";
 import { useSignSession } from "@/hooks/useSignSession";
 import { CopyButton } from "./copy-button";
 
@@ -37,30 +37,76 @@ export function CeremonyActionCard({
   const scCount = Object.keys(sess.sig_shares).length;
   const done = sess.status === "complete" && !!sess.sig_s;
 
-  let actionNode: React.ReactNode;
-  let actionDescription: string | null = null;
+  // ── Terminal success state ────────────────────────────────────────────────
+  if (done) {
+    return (
+      <Box
+        borderWidth={1}
+        borderColor="status.success"
+        rounded="2xl"
+        bg="status.successBg"
+        boxShadow="surface"
+        px={5}
+        py={6}
+      >
+        <Flex direction="column" align="center" gap={3}>
+          <Flex
+            w={12}
+            h={12}
+            rounded="full"
+            align="center"
+            justify="center"
+            bg="status.success"
+            color="white"
+          >
+            <CheckCircle2 size={24} />
+          </Flex>
+          <Flex direction="column" align="center" gap={0.5}>
+            <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
+              Transaction submitted
+            </Text>
+            <Text fontFamily="body" fontSize="xs" color="fg.muted">
+              The signing ceremony completed successfully.
+            </Text>
+          </Flex>
+          {s.txHash && (
+            <Flex
+              align="center"
+              gap={1}
+              px={3}
+              py={1.5}
+              rounded="lg"
+              bg="bg.default"
+              borderWidth={1}
+              borderColor="border.default"
+            >
+              <Text fontFamily="mono" fontSize="2xs" color="fg.muted">
+                {s.txHash.slice(0, 14)}…{s.txHash.slice(-10)}
+              </Text>
+              <CopyButton value={s.txHash} />
+            </Flex>
+          )}
+        </Flex>
+      </Box>
+    );
+  }
+
+  // ── Determine current interactive state ───────────────────────────────────
+  let heading: string;
+  let icon: React.ReactNode;
+  let tone: "action" | "waiting" | "locked";
+  let actionNode: React.ReactNode = null;
+  let actionDescription: string;
 
   if (!s.isMember) {
-    actionNode = null;
+    heading = "Read only";
+    icon = <Lock size={15} />;
+    tone = "locked";
     actionDescription = "You are not a member of this vault.";
-  } else if (done) {
-    actionNode = (
-      <Flex direction="column" align="center" gap={2}>
-        <Flex align="center" gap={2} color="status.success">
-          <CheckCircle2 size={20} />
-          <Text fontWeight="semibold">Transaction sent</Text>
-        </Flex>
-        {s.txHash && (
-          <Flex align="center" gap={1}>
-            <Text fontFamily="mono" fontSize="xs" color="fg.muted">
-              {s.txHash.slice(0, 12)}…{s.txHash.slice(-8)}
-            </Text>
-            <CopyButton value={s.txHash} />
-          </Flex>
-        )}
-      </Flex>
-    );
   } else if (s.canCommit) {
+    heading = "Your turn";
+    icon = <Clock size={15} />;
+    tone = "action";
     actionDescription =
       "Review and verify the transaction details, then commit your nonce to begin the signing ceremony.";
     actionNode = (
@@ -69,6 +115,9 @@ export function CeremonyActionCard({
       </Button>
     );
   } else if (s.canSign) {
+    heading = "Your turn";
+    icon = <Clock size={15} />;
+    tone = "action";
     actionDescription =
       "All commits collected. Produce your signature share to advance to the aggregation phase.";
     actionNode = (
@@ -77,6 +126,9 @@ export function CeremonyActionCard({
       </Button>
     );
   } else if (s.canAggregate) {
+    heading = "Final step";
+    icon = <Clock size={15} />;
+    tone = "action";
     actionDescription =
       "All signature shares collected. Aggregate them into a Schnorr signature and submit the transaction on-chain.";
     actionNode = (
@@ -85,36 +137,62 @@ export function CeremonyActionCard({
       </Button>
     );
   } else if (s.isCommitter && !s.hasSigned) {
+    heading = "Waiting";
+    icon = <Clock size={15} />;
+    tone = "waiting";
     actionDescription = `Waiting for more commits (${ncCount}/${sess.threshold}).`;
-    actionNode = null;
   } else if (s.hasSigned) {
+    heading = "Waiting";
+    icon = <Clock size={15} />;
+    tone = "waiting";
     actionDescription = `Waiting for more signature shares (${scCount}/${sess.threshold}).`;
-    actionNode = null;
   } else {
+    heading = "Waiting";
+    icon = <Clock size={15} />;
+    tone = "waiting";
     actionDescription = "Waiting for the ceremony to advance…";
-    actionNode = null;
   }
+
+  const toneColor =
+    tone === "action" ? "brand.solid" : tone === "waiting" ? "fg.muted" : "fg.subtle";
 
   return (
     <Box
       borderWidth={1}
-      borderColor="border.default"
-      rounded="xl"
+      borderColor={tone === "action" ? "border.emphasis" : "border.default"}
+      rounded="2xl"
       bg="bg.default"
       boxShadow="surface"
       px={5}
       py={5}
     >
-      {actionDescription && (
-        <Text fontSize="xs" color="fg.muted" mb={actionNode ? 4 : 0} textAlign="center">
-          {actionDescription}
+      <Flex align="center" gap={2} mb={2}>
+        <Box
+          color={toneColor}
+          display="flex"
+          animation={tone === "waiting" ? "nexus-pulse 1.8s ease-in-out infinite" : undefined}
+        >
+          {icon}
+        </Box>
+        <Text fontFamily="heading" fontSize="sm" fontWeight="semibold" color="fg.default">
+          {heading}
         </Text>
-      )}
+      </Flex>
+
+      <Text fontSize="xs" color="fg.muted" lineHeight="tall" mb={actionNode ? 4 : 0}>
+        {actionDescription}
+      </Text>
+
       {actionNode}
+
       {(localError || s.error) && (
-        <Flex align="center" gap={2} color="status.danger" mt={3} justify="center">
-          <AlertCircle size={14} />
-          <Text fontSize="xs">{localError || s.error}</Text>
+        <Flex align="flex-start" gap={2} color="status.danger" mt={3}>
+          <Box mt="1px" flexShrink={0}>
+            <AlertCircle size={14} />
+          </Box>
+          <Text fontSize="xs" lineHeight="tall">
+            {localError || s.error}
+          </Text>
         </Flex>
       )}
     </Box>

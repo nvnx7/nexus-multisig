@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, Button, Flex } from "@chakra-ui/react";
+import { Box, Button, Flex, Text } from "@chakra-ui/react";
 import { ArrowLeft } from "lucide-react";
 import { TransactionSummaryCard } from "./transaction-summary-card";
 import { CeremonyProgressCard } from "./ceremony-progress-card";
@@ -17,18 +17,44 @@ export function SignSessionDashboard({
   const router = useRouter();
 
   return (
-    <Flex flex={1} direction="column" align="center" h="full" bg="bg.canvas" overflowY="auto" py={10} px={6}>
+    <Flex
+      flex={1}
+      direction="column"
+      align="center"
+      h="full"
+      bg="bg.canvas"
+      overflowY="auto"
+      py={10}
+      px={6}
+    >
       <Box w="full" maxW="lg">
-        <Button
-          size="xs"
-          variant="ghost"
-          onClick={() => router.push(`/vault/${vaultAddress}`)}
-          mb={6}
-          color="fg.muted"
-        >
-          <ArrowLeft size={14} />
-          Back to vault
-        </Button>
+        {/* Page header */}
+        <Flex align="center" justify="space-between" mb={6}>
+          <Flex direction="column" gap={0.5}>
+            <Text
+              fontFamily="heading"
+              fontSize="lg"
+              fontWeight="semibold"
+              letterSpacing="-0.01em"
+              color="fg.default"
+            >
+              Signing Ceremony
+            </Text>
+            <Text fontFamily="body" fontSize="xs" color="fg.muted">
+              Threshold approval for a proposed transaction
+            </Text>
+          </Flex>
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={() => router.push(`/vault/${vaultAddress}`)}
+            color="fg.muted"
+            _hover={{ color: "fg.default", bg: "bg.subtle" }}
+          >
+            <ArrowLeft size={14} />
+            Back
+          </Button>
+        </Flex>
 
         <TransactionSummaryCard vaultAddress={vaultAddress} sessionId={sessionId} />
         <CeremonyProgressCard vaultAddress={vaultAddress} sessionId={sessionId} />
