@@ -3,7 +3,7 @@ import { Box, Flex, Separator, Text } from "@chakra-ui/react";
 import { DepositForm } from "./forms/deposit-form";
 import { WithdrawForm } from "./forms/withdraw-form";
 import { TransferForm } from "./forms/transfer-form";
-import { PendingTxList } from "./pending-tx-list";
+import { PendingTxList, CompletedTxList } from "./pending-tx-list";
 import { PendingTx } from "./types";
 
 interface VaultFormPanelProps {
@@ -74,6 +74,8 @@ export function VaultFormPanel({
       <Separator borderColor="border.subtle" my={2} />
 
       <PendingTxList pendingTxs={pendingTxs} onSelectSession={onSelectSession} />
+
+      <CompletedTxList pendingTxs={pendingTxs} onSelectSession={onSelectSession} />
     </Box>
   );
 }

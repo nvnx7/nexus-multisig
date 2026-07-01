@@ -64,11 +64,10 @@ export function WithdrawForm() {
           fontWeight="semibold"
           color="fg.default"
         >
-          Initiate Multisig Withdrawal
+          Withdraw XLM
         </Text>
         <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1}>
-          Propose a withdrawal from this vault. This transaction requires
-          co-signer approvals to execute.
+          Withdraw from this vault to any public Stellar address by proposing a Withdraw transaction.
         </Text>
       </Box>
       <Box as="form" onSubmit={handleSubmit}>

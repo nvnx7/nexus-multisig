@@ -103,7 +103,6 @@ export function VaultDetailsDashboard({ vaultAddress }: VaultDetailsDashboardPro
         onTabChange={setActiveTab}
         onCopyAddress={() => {
           navigator.clipboard.writeText(shareableAddress ?? vaultAddress);
-          setNotification({ message: "Shielded address copied!", type: "success" });
         }}
         onBack={() => router.push("/")}
         userAddress={stellarAddress || undefined}

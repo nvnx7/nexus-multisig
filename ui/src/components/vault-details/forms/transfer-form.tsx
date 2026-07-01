@@ -64,11 +64,11 @@ export function TransferForm() {
           fontWeight="semibold"
           color="fg.default"
         >
-          Shielded ZK Transfer
+          Transfer XLM
         </Text>
         <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1}>
-          Execute a private transfer to another shielded identity. Enforces ZK
-          proof validation and requires co-signer approvals.
+          Transfer XLM from this vault to any other vault&apos;s shielded
+          address by proposing a Transfer transaction.
         </Text>
       </Box>
       <Box as="form" onSubmit={handleSubmit}>
@@ -80,10 +80,10 @@ export function TransferForm() {
               fontWeight="medium"
               color="fg.default"
             >
-              Destination Shielded Identity (Nexus Address)
+              Destination Shielded Address
             </Text>
             <Input
-              placeholder="e.g. nexus..."
+              placeholder="e.g. 6ba87...d311e"
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
               bg="bg.subtle"

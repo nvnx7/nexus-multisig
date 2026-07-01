@@ -45,11 +45,10 @@ export function DepositForm() {
           fontWeight="semibold"
           color="fg.default"
         >
-          Deposit XLM into Vault
+          Deposit XLM
         </Text>
         <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1}>
-          Fund this threshold vault. Anyone can deposit without signing
-          authorizations.
+          Fund this vault by proposing a Deposit transaction.
         </Text>
       </Box>
       <Box as="form" onSubmit={handleSubmit}>
@@ -81,7 +80,7 @@ export function DepositForm() {
             </Text>
           )}
           <Button type="submit" mt={2} size="md" loading={pending}>
-            Deposit XLM
+            Propose Deposit
           </Button>
         </Flex>
       </Box>

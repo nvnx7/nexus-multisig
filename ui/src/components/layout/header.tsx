@@ -9,7 +9,7 @@ import {
   Text,
 } from "@chakra-ui/react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 function StellarMark({ ...props }: React.SVGProps<SVGSVGElement>) {
   return (
@@ -31,7 +31,13 @@ function StellarMark({ ...props }: React.SVGProps<SVGSVGElement>) {
 
 export function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const { stellarAddress, disconnect } = useWallet();
+
+  function handleDisconnect() {
+    disconnect();
+    router.push("/");
+  }
 
   const shortAddress = stellarAddress
     ? `${stellarAddress.slice(0, 6)}…${stellarAddress.slice(-4)}`
@@ -69,7 +75,7 @@ export function Header() {
 
         {/* Navigation Links */}
         <HStack gap={6}>
-          <Link href="/">
+          <Link href="/" style={{ textDecoration: "none" }}>
             <Text
               fontFamily="body"
               fontSize="sm"
@@ -78,19 +84,19 @@ export function Header() {
               _hover={{ color: "brand.solid" }}
               transition="color 0.2s"
             >
-              Dashboard
+              Home
             </Text>
           </Link>
-          <Link href="/vault/new">
+          <Link href="https://github.com/nvnx7/nexus-multisig" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
             <Text
               fontFamily="body"
               fontSize="sm"
-              fontWeight={pathname.startsWith("/vault/new") ? "medium" : "normal"}
-              color={pathname.startsWith("/vault/new") ? "brand.solid" : "fg.muted"}
+              fontWeight="normal"
+              color="fg.muted"
               _hover={{ color: "brand.solid" }}
               transition="color 0.2s"
             >
-              New Vault
+              Docs
             </Text>
           </Link>
         </HStack>
@@ -111,7 +117,7 @@ export function Header() {
                   {shortAddress}
                 </Text>
               </Box>
-              <Button size="xs" variant="outline" onClick={disconnect}>
+              <Button size="xs" variant="outline" onClick={handleDisconnect}>
                 Disconnect
               </Button>
             </>
