@@ -10,38 +10,48 @@ export function Footer() {
       bg="bg.default"
       borderTopWidth="1px"
       borderColor="border.subtle"
-      px={6}
+      px={8}
       flexShrink={0}
     >
       <Flex h="full" align="center" justify="space-between">
+
+        {/* ── Left: Brand ── */}
         <Text fontFamily="body" fontSize="2xs" color="fg.muted">
-          Nexus Multisig
+          &copy; {new Date().getFullYear()}{" "}
+          <Text as="span" color="fg.default" fontWeight="medium">
+            Nexus Multisig
+          </Text>
         </Text>
 
-        <HStack gap={4}>
-          <Link href="https://github.com/nvnx7/nexus-multisig" target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+        {/* ── Right: Links + Network ── */}
+        <HStack gap={5} align="center">
+          <Link
+            href="https://github.com/nvnx7/nexus-multisig"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ textDecoration: "none" }}
+          >
             <Text
               fontFamily="body"
               fontSize="2xs"
               color="fg.muted"
-              cursor="pointer"
-              _hover={{ color: "brand.solid" }}
-              transition="color 0.2s"
+              _hover={{ color: "fg.default" }}
+              transition="color 0.15s"
             >
               Documentation
             </Text>
           </Link>
-          <Box
-            px={2}
-            py={0.5}
-            bg="status.successBg"
-            borderRadius="full"
-          >
-            <Text fontFamily="mono" fontSize="3xs" fontWeight="bold" color="status.success">
-              TESTNET
+
+          <Box w="1px" h={3} bg="border.default" />
+
+          <HStack gap={1.5}>
+            <Box w="5px" h="5px" bg="status.success" borderRadius="full" />
+            <Text fontFamily="mono" fontSize="2xs" fontWeight="medium" color="status.success" letterSpacing="0.04em">
+              Testnet
             </Text>
-          </Box>
+          </HStack>
         </HStack>
+
       </Flex>
     </Box>
   );
