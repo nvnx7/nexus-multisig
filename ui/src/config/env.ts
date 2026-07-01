@@ -19,3 +19,7 @@ export const passphraseNetwork = isTestnet
 
 export const apiUrlCoordinator = process.env
   .NEXT_PUBLIC_COORDINATOR_API_URL as string;
+
+export const horizonUrl = isTestnet
+  ? "https://horizon-testnet.stellar.org"
+  : "http://localhost:8000";
