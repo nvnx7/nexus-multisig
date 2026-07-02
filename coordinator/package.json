@@ -6,6 +6,7 @@
     "dev": "bun --hot src/index.ts",
     "start": "bun src/index.ts",
     "reset": "bun scripts/reset.ts",
+    "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
