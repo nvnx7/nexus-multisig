@@ -46,7 +46,7 @@ const MAX_DEPOSIT = 18446744073709551615n;
 const RPC_URL =
   NETWORK === "local"
     ? "http://localhost:8000/rpc"
-    : "https://soroban-testnet.stellar.org:443";
+    : "https://soroban-testnet.stellar.org";
 const NETWORK_PASSPHRASE =
   NETWORK === "local" ? Networks.STANDALONE : Networks.TESTNET;
 
