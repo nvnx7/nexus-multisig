@@ -131,8 +131,6 @@ export function CreateVaultStepper() {
     ? (session ? (STATUS_STEP_INDEX[session.status] ?? 1) : 1)
     : 1;
 
-  const isWaiting = !!session && session.status !== "complete";
-
   function handleCopySession() {
     if (!sessionId) return;
     navigator.clipboard.writeText(sessionId).catch(() => {});
@@ -181,11 +179,12 @@ export function CreateVaultStepper() {
           color="rgba(255,255,255,0.6)"
           _hover={{ color: "white", bg: "rgba(255,255,255,0.08)" }}
           onClick={() => router.push("/")}
-          disabled={isWaiting}
           alignSelf="flex-start"
           px={2}
           gap={1.5}
           flexShrink={0}
+          position="relative"
+          zIndex={1}
         >
           <ArrowLeft size={14} />
           Back

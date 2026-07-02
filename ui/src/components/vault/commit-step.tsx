@@ -93,10 +93,10 @@ export function CommitStep({ sessionId }: CommitStepProps) {
       {/* Step title */}
       <Box>
         <Text fontFamily="heading" fontSize="lg" fontWeight="semibold" color="fg.default" mb={1}>
-          Security Key
+          Commit Phase
         </Text>
         <Text fontFamily="body" fontSize="sm" color="fg.muted" lineHeight="relaxed">
-          Each member generates and submits their unique security key to participate in the vault.
+          Each member commits to participating in the vault.
         </Text>
       </Box>
 
@@ -117,10 +117,10 @@ export function CommitStep({ sessionId }: CommitStepProps) {
             </Flex>
             <Box>
               <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
-                Generate your security key
+                Review & Commitment
               </Text>
               <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
-                Your unique security key enables your participation in authorizing transactions from this vault.
+                Submit your commitment to confirm your participation in this vault setup.
               </Text>
             </Box>
             <Button
@@ -193,7 +193,7 @@ export function CommitStep({ sessionId }: CommitStepProps) {
         <Flex direction="column" gap={2}>
           <Flex justify="space-between" align="center">
             <Text fontFamily="body" fontSize="xs" color="fg.muted">
-              Members joined
+              Members Committed
             </Text>
             <Text fontFamily="body" fontSize="xs" fontWeight="semibold" color="fg.default">
               {count} / {total}

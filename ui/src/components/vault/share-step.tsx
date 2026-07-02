@@ -88,10 +88,10 @@ export function ShareStep({ sessionId }: ShareStepProps) {
       {/* Step title */}
       <Box>
         <Text fontFamily="heading" fontSize="lg" fontWeight="semibold" color="fg.default" mb={1}>
-          Approval Keys
+          Sign Share
         </Text>
         <Text fontFamily="body" fontSize="sm" color="fg.muted" lineHeight="relaxed">
-          Securely exchange encrypted approval keys with other vault members to complete the setup.
+          Securely exchange the signing shares with other members.
         </Text>
       </Box>
 
@@ -112,10 +112,10 @@ export function ShareStep({ sessionId }: ShareStepProps) {
             </Flex>
             <Box>
               <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
-                Share your approval keys
+                Submit your signing share
               </Text>
               <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
-                Your encrypted approval keys will be shared with other members so the vault can verify signatures from each participant.
+                Your signing share is distributed to other members so the vault can collectively authorize transactions.
               </Text>
             </Box>
             <Button
@@ -126,7 +126,7 @@ export function ShareStep({ sessionId }: ShareStepProps) {
               gap={2}
             >
               <Share2 size={14} />
-              Generate & Share
+              Submit Signing Share
             </Button>
             {submitR2.error && (
               <Text color="status.danger" fontSize="xs">
@@ -149,18 +149,18 @@ export function ShareStep({ sessionId }: ShareStepProps) {
             </Flex>
             <Box>
               <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
-                Keys shared
+                Share submitted
               </Text>
               <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
-                Your approval keys are in. Waiting for other members to share theirs.
+                Your signing share is in. Waiting for other members to submit theirs.
               </Text>
             </Box>
             <Flex align="center" gap={2} mt={1}>
               <Spinner size="xs" color="brand.solid" />
               <Text fontSize="2xs" color="fg.muted" fontWeight="medium">
                 {count === total
-                  ? "All members ready. Moving to next step…"
-                  : `Waiting for members · ${count} of ${total} shared`}
+                  ? "All shares in. Moving to next step…"
+                  : `Waiting for members · ${count} of ${total} submitted`}
               </Text>
             </Flex>
           </>
@@ -172,7 +172,7 @@ export function ShareStep({ sessionId }: ShareStepProps) {
         <Flex direction="column" gap={2}>
           <Flex justify="space-between" align="center">
             <Text fontFamily="body" fontSize="xs" color="fg.muted">
-              Keys exchanged
+              Shares Submitted
             </Text>
             <Text fontFamily="body" fontSize="xs" fontWeight="semibold" color="fg.default">
               {count} / {total}
