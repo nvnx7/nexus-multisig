@@ -62,7 +62,12 @@ export function CeremonyActionCard({
             <CheckCircle2 size={24} />
           </Flex>
           <Flex direction="column" align="center" gap={0.5}>
-            <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
+            <Text
+              fontFamily="heading"
+              fontSize="md"
+              fontWeight="semibold"
+              color="fg.default"
+            >
               Transaction submitted
             </Text>
             <Text fontFamily="body" fontSize="xs" color="fg.muted">
@@ -108,10 +113,10 @@ export function CeremonyActionCard({
     icon = <Clock size={15} />;
     tone = "action";
     actionDescription =
-      "Review and verify the transaction details, then commit your nonce to begin the signing ceremony.";
+      "Review and verify the transaction details, then commit to it.";
     actionNode = (
       <Button onClick={run(s.commit)} loading={busy} size="lg" w="full">
-        Review &amp; Commit
+        Commit
       </Button>
     );
   } else if (s.canSign) {
@@ -119,7 +124,7 @@ export function CeremonyActionCard({
     icon = <Clock size={15} />;
     tone = "action";
     actionDescription =
-      "All commits collected. Produce your signature share to advance to the aggregation phase.";
+      "All commitments received. Now sign the transaction to proceed.";
     actionNode = (
       <Button onClick={run(s.sign)} loading={busy} size="lg" w="full">
         Sign
@@ -130,10 +135,15 @@ export function CeremonyActionCard({
     icon = <Clock size={15} />;
     tone = "action";
     actionDescription =
-      "All signature shares collected. Aggregate them into a Schnorr signature and submit the transaction on-chain.";
+      "All signatures collected. Ready to execute the transaction on-chain.";
     actionNode = (
-      <Button onClick={run(s.aggregateAndSend)} loading={busy} size="lg" w="full">
-        Aggregate &amp; Send
+      <Button
+        onClick={run(s.aggregateAndSend)}
+        loading={busy}
+        size="lg"
+        w="full"
+      >
+        Execute
       </Button>
     );
   } else if (s.isCommitter && !s.hasSigned) {
@@ -154,7 +164,11 @@ export function CeremonyActionCard({
   }
 
   const toneColor =
-    tone === "action" ? "brand.solid" : tone === "waiting" ? "fg.muted" : "fg.subtle";
+    tone === "action"
+      ? "brand.solid"
+      : tone === "waiting"
+        ? "fg.muted"
+        : "fg.subtle";
 
   return (
     <Box
@@ -170,16 +184,30 @@ export function CeremonyActionCard({
         <Box
           color={toneColor}
           display="flex"
-          animation={tone === "waiting" ? "nexus-pulse 1.8s ease-in-out infinite" : undefined}
+          animation={
+            tone === "waiting"
+              ? "nexus-pulse 1.8s ease-in-out infinite"
+              : undefined
+          }
         >
           {icon}
         </Box>
-        <Text fontFamily="heading" fontSize="sm" fontWeight="semibold" color="fg.default">
+        <Text
+          fontFamily="heading"
+          fontSize="sm"
+          fontWeight="semibold"
+          color="fg.default"
+        >
           {heading}
         </Text>
       </Flex>
 
-      <Text fontSize="xs" color="fg.muted" lineHeight="tall" mb={actionNode ? 4 : 0}>
+      <Text
+        fontSize="xs"
+        color="fg.muted"
+        lineHeight="tall"
+        mb={actionNode ? 4 : 0}
+      >
         {actionDescription}
       </Text>
 
