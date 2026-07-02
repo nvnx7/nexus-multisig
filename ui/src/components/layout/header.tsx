@@ -3,6 +3,7 @@
 import { useWallet } from "@/context/wallet-context";
 import { useNativeBalance } from "@/api/account";
 import { Box, Button, Flex, HStack, Text } from "@chakra-ui/react";
+import { LogOut, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -25,7 +26,7 @@ const NAV_LINKS = [
 
 export function Header() {
   const pathname = usePathname();
-  const router   = useRouter();
+  const router = useRouter();
   const { stellarAddress, disconnect } = useWallet();
 
   const shortAddress = stellarAddress
@@ -42,22 +43,46 @@ export function Header() {
   return (
     <Box
       as="header"
+      position="relative"
       w="full"
       h="14"
       bg="bg.default"
       borderBottomWidth="1px"
-      borderColor="border.subtle"
+      borderColor="border.default"
+      boxShadow="surface"
       px={8}
       flexShrink={0}
+      zIndex={10}
     >
-      <Flex h="full" align="center" justify="space-between">
+      {/* Top brand accent line */}
+      <Box
+        position="absolute"
+        top={0}
+        left={0}
+        right={0}
+        h="2px"
+        bgImage="linear-gradient(90deg, #0d4732 0%, #52a07d 50%, #0d4732 100%)"
+      />
 
+      <Flex h="full" align="center" justify="space-between">
         {/* ── Brand ── */}
         <Link href="/" style={{ textDecoration: "none" }}>
-          <HStack gap={2.5} align="center">
-            <Box w="18px" h="18px" color="brand.solid" flexShrink={0}>
-              <NexusMark width="100%" height="100%" />
-            </Box>
+          <HStack gap={2.5} align="center" role="group">
+            <Flex
+              w={8}
+              h={8}
+              rounded="lg"
+              align="center"
+              justify="center"
+              bg="brand.solid"
+              color="white"
+              boxShadow="surface"
+              flexShrink={0}
+              transition="transform 0.2s"
+              _groupHover={{ transform: "rotate(90deg)" }}
+            >
+              <NexusMark width="18" height="18" />
+            </Flex>
             <HStack gap={1.5} align="baseline">
               <Text
                 fontFamily="heading"
@@ -71,10 +96,14 @@ export function Header() {
               <Text
                 fontFamily="mono"
                 fontSize="9px"
-                letterSpacing="0.1em"
+                letterSpacing="0.14em"
                 textTransform="uppercase"
-                color="fg.muted"
-                pb="1px"
+                color="brand.solid"
+                bg="brand.subtle"
+                px={1.5}
+                py="1px"
+                rounded="full"
+                pb="2px"
               >
                 multisig
               </Text>
@@ -83,7 +112,7 @@ export function Header() {
         </Link>
 
         {/* ── Nav ── */}
-        <HStack gap={1}>
+        <HStack gap={1} position="absolute" left="50%" transform="translateX(-50%)">
           {NAV_LINKS.map(({ label, href, exact, external }) => {
             const isActive = exact ? pathname === href : pathname.startsWith(href);
             return (
@@ -93,29 +122,22 @@ export function Header() {
                 {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                 style={{ textDecoration: "none" }}
               >
-                <Box position="relative" px={3} py={2}>
+                <Box
+                  px={3.5}
+                  py={1.5}
+                  rounded="full"
+                  bg={isActive ? "brand.subtle" : "transparent"}
+                  transition="background 0.15s, color 0.15s"
+                  _hover={{ bg: isActive ? "brand.subtle" : "bg.subtle" }}
+                >
                   <Text
                     fontFamily="body"
                     fontSize="sm"
-                    fontWeight={isActive ? "medium" : "normal"}
-                    color={isActive ? "fg.default" : "fg.muted"}
-                    _hover={{ color: "fg.default" }}
-                    transition="color 0.15s"
+                    fontWeight={isActive ? "semibold" : "medium"}
+                    color={isActive ? "brand.solid" : "fg.muted"}
                   >
                     {label}
                   </Text>
-                  {isActive && (
-                    <Box
-                      position="absolute"
-                      bottom="-1px"
-                      left="50%"
-                      transform="translateX(-50%)"
-                      w={4}
-                      h="2px"
-                      bg="brand.solid"
-                      borderRadius="full"
-                    />
-                  )}
                 </Box>
               </Link>
             );
@@ -128,33 +150,54 @@ export function Header() {
             <>
               <HStack
                 gap={2.5}
-                px={3}
-                py={1.5}
+                pl={1.5}
+                pr={3}
+                py={1}
                 bg="bg.subtle"
                 borderWidth="1px"
                 borderColor="border.default"
-                borderRadius="lg"
+                borderRadius="full"
               >
-                <Box w="6px" h="6px" bg="status.success" borderRadius="full" flexShrink={0} />
-                <Text fontFamily="mono" fontSize="2xs" color="fg.default" letterSpacing="0.01em">
-                  {shortAddress}
-                </Text>
-                {nativeBalance != null && (
-                  <>
-                    <Box w="1px" h={3} bg="border.default" />
-                    <Text fontFamily="mono" fontSize="2xs" color="fg.muted">
+                {/* Gradient avatar orb */}
+                <Box position="relative" w={6} h={6} flexShrink={0}>
+                  <Box
+                    w={6}
+                    h={6}
+                    rounded="full"
+                    bgImage="linear-gradient(135deg, #52a07d 0%, #0d4732 100%)"
+                    boxShadow="inset 0 0 0 1px rgba(255,255,255,0.15)"
+                  />
+                  <Box
+                    position="absolute"
+                    bottom="-1px"
+                    right="-1px"
+                    w={2}
+                    h={2}
+                    rounded="full"
+                    bg="status.success"
+                    borderWidth="1.5px"
+                    borderColor="bg.subtle"
+                  />
+                </Box>
+                <Flex direction="column" gap={0} lineHeight={1}>
+                  <Text fontFamily="mono" fontSize="2xs" color="fg.default" letterSpacing="0.01em" fontWeight="medium">
+                    {shortAddress}
+                  </Text>
+                  {nativeBalance != null && (
+                    <Text fontFamily="mono" fontSize="9px" color="fg.muted" mt="1px">
                       {nativeBalance} XLM
                     </Text>
-                  </>
-                )}
+                  )}
+                </Flex>
               </HStack>
               <Button
-                size="xs"
+                size="sm"
                 variant="solid"
                 fontFamily="body"
                 fontSize="xs"
                 onClick={handleDisconnect}
               >
+                <LogOut size={13} />
                 Disconnect
               </Button>
             </>
@@ -162,20 +205,21 @@ export function Header() {
             <HStack
               gap={2}
               px={3}
-              py={1.5}
+              py={2}
               bg="status.warningBg"
               borderWidth="1px"
               borderColor="border.default"
-              borderRadius="lg"
+              borderRadius="full"
             >
-              <Box w="6px" h="6px" bg="status.warning" borderRadius="full" flexShrink={0} />
-              <Text fontFamily="mono" fontSize="2xs" color="status.warning" fontWeight="medium">
+              <Box color="status.warning" display="flex">
+                <Wallet size={13} />
+              </Box>
+              <Text fontFamily="body" fontSize="2xs" color="status.warning" fontWeight="semibold">
                 Not connected
               </Text>
             </HStack>
           )}
         </HStack>
-
       </Flex>
     </Box>
   );
