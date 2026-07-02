@@ -71,7 +71,7 @@ export function CeremonyActionCard({
               Transaction submitted
             </Text>
             <Text fontFamily="body" fontSize="xs" color="fg.muted">
-              The signing ceremony completed successfully.
+              The transaction was executed successfully.
             </Text>
           </Flex>
           {s.txHash && (
