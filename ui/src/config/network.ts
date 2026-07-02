@@ -1,6 +1,6 @@
-import { POOL_CONTRACT_ID_LOCAL } from "./constants";
+import { POOL_CONTRACT_ID_LOCAL, POOL_CONTRACT_ID_TESTNET } from "./constants";
 import {
-  apiUrlCoordinator,
+  apiUrlCoordinatorLocal,
   horizonUrlLocal,
   horizonUrlTestnet,
   passphraseLocalNetwork,
@@ -8,6 +8,7 @@ import {
   rpcUrlLocal,
   rpcUrlTestnet,
   network,
+  apiUrlCoordinatorTestnet,
 } from "./env";
 
 export type NetworkConfig = {
@@ -24,7 +25,7 @@ const localNetworkConfig: NetworkConfig = {
   rpcUrl: rpcUrlLocal,
   horizonUrl: horizonUrlLocal,
   passphrase: passphraseLocalNetwork,
-  coordinatorApiUrl: apiUrlCoordinator,
+  coordinatorApiUrl: apiUrlCoordinatorLocal,
   poolContractId: POOL_CONTRACT_ID_LOCAL,
 };
 
@@ -32,8 +33,8 @@ const testnetNetworkConfig: NetworkConfig = {
   rpcUrl: rpcUrlTestnet,
   horizonUrl: horizonUrlTestnet,
   passphrase: passphraseTestnetNetwork,
-  coordinatorApiUrl: apiUrlCoordinator,
-  poolContractId: "",
+  coordinatorApiUrl: apiUrlCoordinatorTestnet,
+  poolContractId: POOL_CONTRACT_ID_TESTNET,
 };
 
 const networkConfigs: Record<NetworkType, NetworkConfig> = {

@@ -23,5 +23,7 @@ export const passphraseNetwork = isTestnet
   ? passphraseTestnetNetwork
   : passphraseLocalNetwork;
 
-export const apiUrlCoordinator = process.env
-  .NEXT_PUBLIC_COORDINATOR_API_URL as string;
+export const apiUrlCoordinatorLocal = process.env
+  .NEXT_PUBLIC_COORDINATOR_API_URL_LOCAL as string;
+export const apiUrlCoordinatorTestnet = process.env
+  .NEXT_PUBLIC_COORDINATOR_API_URL_TESTNET as string;
