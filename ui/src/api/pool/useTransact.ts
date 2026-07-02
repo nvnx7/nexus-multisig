@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { buildTransactTx, type TransactInput, type ExtData } from "./transact";
-import { signAndSubmit } from "@/api/rpc";
 
 export type TransactStatus =
   | "idle"
@@ -27,8 +26,6 @@ export function useTransact() {
     }) => {
       setPhase("proving");
       const tx = await buildTransactTx(senderAddress, input, extData);
-      // setPhase("signing");
-      // const hash = await signAndSubmit(tx, senderAddress);
       const hash = await tx.signAndSend();
       console.log("transact hash", hash);
       return "";

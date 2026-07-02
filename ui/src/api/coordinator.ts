@@ -1,5 +1,5 @@
 import axios from "axios";
-import { apiUrlCoordinator } from "@/config/env";
+import { networkConfig } from "@/config/network";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -10,7 +10,13 @@ export class ApiError extends Error {
   }
 }
 
-const coordinatorClient = axios.create({ baseURL: `${apiUrlCoordinator}/api` });
+const apiUrl = networkConfig.coordinatorApiUrl;
+
+if (!apiUrl) {
+  throw new Error("Coordinator API URL is not defined.");
+}
+
+const coordinatorClient = axios.create({ baseURL: `${apiUrl}/api` });
 
 coordinatorClient.interceptors.response.use(
   (res) => res,
