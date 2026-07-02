@@ -17,6 +17,5 @@ export const bjj_FROST = createFROST({
   Point: babyjubjub.Point,
   // noble's CHash types its output as Uint8Array<ArrayBufferLike>, which doesn't
   // structurally match createFROST's ArrayBuffer-branded hash signature.
-  // @ts-expect-error - benign ArrayBufferLike vs ArrayBuffer brand mismatch
   hash: sha256,
 });
