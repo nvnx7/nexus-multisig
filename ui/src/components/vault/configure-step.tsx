@@ -9,11 +9,10 @@ import {
   Field,
   Flex,
   Input,
-  Separator,
   Spinner,
   Text,
 } from "@chakra-ui/react";
-import { Minus, Plus, X } from "lucide-react";
+import { Minus, Plus, Shield, UserPlus, X } from "lucide-react";
 import { useWallet } from "@/context/wallet-context";
 import { useCreateDkgSession } from "@/api/dkg/createDkgSession";
 import { getShieldedAddress } from "@/api/pool/getShieldedAddress";
@@ -23,7 +22,7 @@ interface MemberEntry {
   isSelf: boolean;
 }
 
-// ── Number stepper (replacement for HeroUI NumberField) ──────────────────────
+// ── Number stepper ────────────────────────────────────────────────────────────
 
 interface NumberStepperProps {
   value: number;
@@ -37,11 +36,12 @@ function NumberStepper({ value, onChange, min, max }: NumberStepperProps) {
     <Flex
       align="center"
       borderWidth={1}
-      borderColor="border.emphasis"
-      rounded="md"
+      borderColor="border.default"
+      rounded="lg"
       overflow="hidden"
       display="inline-flex"
       h={9}
+      bg="bg.subtle"
     >
       <Button
         onClick={() => onChange(Math.max(min, value - 1))}
@@ -50,6 +50,9 @@ function NumberStepper({ value, onChange, min, max }: NumberStepperProps) {
         h="full"
         minW={0}
         rounded="none"
+        variant="ghost"
+        color="fg.muted"
+        _hover={{ bg: "bg.muted", color: "fg.default" }}
         aria-label="Decrease"
       >
         <Minus size={12} />
@@ -61,10 +64,10 @@ function NumberStepper({ value, onChange, min, max }: NumberStepperProps) {
         h="full"
         borderLeftWidth={1}
         borderRightWidth={1}
-        borderColor="border.emphasis"
+        borderColor="border.default"
         fontFamily="mono"
         fontSize="sm"
-        fontWeight="medium"
+        fontWeight="semibold"
         color="fg.default"
         bg="bg.default"
       >
@@ -77,6 +80,9 @@ function NumberStepper({ value, onChange, min, max }: NumberStepperProps) {
         h="full"
         minW={0}
         rounded="none"
+        variant="ghost"
+        color="fg.muted"
+        _hover={{ bg: "bg.muted", color: "fg.default" }}
         aria-label="Increase"
       >
         <Plus size={12} />
@@ -157,25 +163,29 @@ export function ConfigureStep() {
     threshold <= members.length;
 
   return (
-    <Flex direction="column" gap={8}>
-      {/* Participants */}
-      <Flex direction="column" gap={4}>
-        <Box>
-          <Text
-            as="h3"
-            fontFamily="heading"
-            fontSize="md"
-            fontWeight="semibold"
-            color="fg.default"
-          >
-            Participants
-          </Text>
-          <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={0.5}>
-            Add co-signers by their Stellar address. At least 2 required.
-          </Text>
-        </Box>
+    <Flex direction="column" gap={7}>
+      {/* Step title */}
+      <Box>
+        <Text fontFamily="heading" fontSize="lg" fontWeight="semibold" color="fg.default" mb={1}>
+          Vault Members
+        </Text>
+        <Text fontFamily="body" fontSize="sm" color="fg.muted" lineHeight="relaxed">
+          Add co-signers by their Stellar address. You need at least 2 members.
+        </Text>
+      </Box>
 
-        {/* Address input row */}
+      {/* Address input */}
+      <Flex direction="column" gap={3}>
+        <Text
+          fontFamily="body"
+          fontSize="2xs"
+          textTransform="uppercase"
+          letterSpacing="widest"
+          color="fg.muted"
+          fontWeight="semibold"
+        >
+          Add member
+        </Text>
         <Field.Root invalid={!!inputError}>
           <Flex gap={2} w="full">
             <Input
@@ -190,6 +200,8 @@ export function ConfigureStep() {
               fontSize="xs"
               flex={1}
               size="sm"
+              borderColor="border.default"
+              _focus={{ borderColor: "brand.solid", boxShadow: "0 0 0 1px var(--chakra-colors-brand-solid)" }}
             />
             <Button
               size="sm"
@@ -197,8 +209,14 @@ export function ConfigureStep() {
               disabled={inputChecking || !inputValue.trim()}
               flexShrink={0}
               h={9}
+              gap={1.5}
             >
-              {inputChecking ? <Spinner as="span" size="sm" color="brand.solid" /> : "Add"}
+              {inputChecking ? (
+                <Spinner as="span" size="sm" />
+              ) : (
+                <UserPlus size={13} />
+              )}
+              Add
             </Button>
           </Flex>
           {inputError && (
@@ -207,105 +225,151 @@ export function ConfigureStep() {
             </Field.ErrorText>
           )}
         </Field.Root>
-
-        {/* Member list */}
-        <Flex direction="column" gap={1.5}>
-          {members.map((m) => (
-            <Flex
-              key={m.stellarAddress}
-              align="center"
-              gap={3}
-              py={2.5}
-              px={3}
-              rounded="md"
-            // bg="bg.subtle"
-            >
-              <Text
-                fontFamily="mono"
-                fontSize="xs"
-                color="fg.default"
-                truncate
-                flex={1}
-                minW={0}
-              >
-                {m.stellarAddress}
-              </Text>
-              <Flex align="center" gap={2} flexShrink={0}>
-                {m.isSelf && (
-                  <Badge
-                    variant="subtle"
-                    colorPalette="green"
-                    fontFamily="mono"
-                    fontSize="2xs"
-                  >
-                    You
-                  </Badge>
-                )}
-                {!m.isSelf && (
-                  <Button
-                    size="xs"
-                    onClick={() => removeMember(m.stellarAddress)}
-                    _hover={{ color: "status.danger", bg: "status.dangerBg" }}
-                    aria-label="Remove member"
-                    minW={0}
-                  >
-                    <X size={14} />
-                  </Button>
-                )}
-              </Flex>
-            </Flex>
-          ))}
-        </Flex>
       </Flex>
 
-      <Separator borderColor="border.subtle" />
+      {/* Member list */}
+      {members.length > 0 && (
+        <Flex direction="column" gap={2}>
+          <Text
+            fontFamily="body"
+            fontSize="2xs"
+            textTransform="uppercase"
+            letterSpacing="widest"
+            color="fg.muted"
+            fontWeight="semibold"
+          >
+            Members · {members.length}
+          </Text>
+          <Flex direction="column" gap={1.5}>
+            {members.map((m) => (
+              <Flex
+                key={m.stellarAddress}
+                align="center"
+                gap={3}
+                py={2.5}
+                px={3}
+                rounded="lg"
+                bg="bg.subtle"
+                borderWidth={1}
+                borderColor="border.default"
+              >
+                <Box
+                  w={2}
+                  h={2}
+                  rounded="full"
+                  bg={m.isSelf ? "brand.solid" : "fg.subtle"}
+                  flexShrink={0}
+                />
+                <Text
+                  fontFamily="mono"
+                  fontSize="xs"
+                  color="fg.default"
+                  truncate
+                  flex={1}
+                  minW={0}
+                >
+                  {m.stellarAddress}
+                </Text>
+                <Flex align="center" gap={2} flexShrink={0}>
+                  {m.isSelf && (
+                    <Badge
+                      variant="subtle"
+                      colorPalette="green"
+                      fontFamily="mono"
+                      fontSize="2xs"
+                    >
+                      You
+                    </Badge>
+                  )}
+                  {!m.isSelf && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => removeMember(m.stellarAddress)}
+                      _hover={{ color: "status.danger", bg: "status.dangerBg" }}
+                      color="fg.muted"
+                      aria-label="Remove member"
+                      minW={0}
+                    >
+                      <X size={13} />
+                    </Button>
+                  )}
+                </Flex>
+              </Flex>
+            ))}
+          </Flex>
+        </Flex>
+      )}
 
-      {/* Threshold */}
+      {/* Divider */}
+      <Box w="full" h="1px" bg="border.subtle" />
+
+      {/* Approval policy */}
       <Flex direction="column" gap={4}>
         <Box>
           <Text
-            as="h3"
-            fontFamily="heading"
-            fontSize="md"
+            fontFamily="body"
+            fontSize="2xs"
+            textTransform="uppercase"
+            letterSpacing="widest"
+            color="fg.muted"
             fontWeight="semibold"
-            color="fg.default"
+            mb={3}
           >
-            Signing threshold
+            Approval Policy
           </Text>
-          <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={0.5}>
-            Minimum signatures required to authorize a transaction.
+          <Text fontFamily="heading" fontSize="sm" fontWeight="semibold" color="fg.default" mb={0.5}>
+            Signatures required to approve a transaction
+          </Text>
+          <Text fontFamily="body" fontSize="xs" color="fg.muted">
+            How many members must sign before a transaction can be sent.
           </Text>
         </Box>
 
-        <Flex align="center" gap={3}>
-          <Text fontFamily="body" fontSize="sm" color="fg.muted" flexShrink={0}>
-            Require
-          </Text>
+        <Flex align="center" gap={4} py={3} px={4} rounded="lg" bg="bg.subtle" borderWidth={1} borderColor="border.default">
           <NumberStepper
             value={threshold}
             onChange={setThreshold}
             min={1}
             max={members.length || 1}
           />
-          <Text fontFamily="body" fontSize="sm" color="fg.muted">
-            of {members.length} signer{members.length !== 1 ? "s" : ""}
-          </Text>
+          <Flex direction="column" gap={0}>
+            <Text fontFamily="body" fontSize="sm" color="fg.default" fontWeight="medium">
+              of {members.length} member{members.length !== 1 ? "s" : ""}
+            </Text>
+            <Text fontFamily="body" fontSize="xs" color="fg.muted">
+              {threshold === members.length ? "All members must sign" : `Any ${threshold} members must sign`}
+            </Text>
+          </Flex>
         </Flex>
       </Flex>
 
       {startError && (
-        <Text fontFamily="body" fontSize="xs" color="status.danger">
-          {startError.message ?? "Failed to create session"}
-        </Text>
+        <Flex align="center" gap={2} py={2.5} px={3} rounded="lg" bg="status.dangerBg" borderWidth={1} borderColor="status.danger">
+          <Text fontFamily="body" fontSize="xs" color="status.danger">
+            {startError.message ?? "Failed to create vault setup"}
+          </Text>
+        </Flex>
       )}
 
       <Button
         disabled={!canStart}
         onClick={handleSubmit}
-        mt={2}
+        w="full"
+        h={10}
+        gap={2}
       >
-        {isStarting ? <Spinner as="span" size="sm" color="white" /> : null}
-        {isStarting ? "Creating…" : "Create Vault"}
+        {isStarting ? (
+          <>
+            <Spinner as="span" size="sm" />
+            Setting up…
+          </>
+        ) : (
+          <>
+            <Shield size={15} />
+            Create Vault
+          </>
+        )}
       </Button>
     </Flex>
   );

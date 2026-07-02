@@ -16,10 +16,12 @@ function CopyButton({ text }: { text: string }) {
   return (
     <Button
       size="xs"
+      variant="ghost"
       onClick={copy}
       aria-label="Copy"
-      display="flex"
-      h="auto"
+      color="fg.muted"
+      _hover={{ color: "fg.default" }}
+      gap={1}
     >
       <Copy size={11} />
       Copy
@@ -74,7 +76,7 @@ export function CommitStep({ sessionId }: CommitStepProps) {
           <AlertCircle size={28} />
         </Box>
         <Text fontSize="sm" color="fg.default">
-          Failed to load DKG session details
+          Failed to load vault setup details
         </Text>
       </Flex>
     );
@@ -87,38 +89,48 @@ export function CommitStep({ sessionId }: CommitStepProps) {
   const isSubmitting = submitR1.isPending;
 
   return (
-    <Flex direction="column" gap={6} w="full">
-      {/* Header */}
+    <Flex direction="column" gap={7} w="full">
+      {/* Step title */}
+      <Box>
+        <Text fontFamily="heading" fontSize="lg" fontWeight="semibold" color="fg.default" mb={1}>
+          Security Key
+        </Text>
+        <Text fontFamily="body" fontSize="sm" color="fg.muted" lineHeight="relaxed">
+          Each member generates and submits their unique security key to participate in the vault.
+        </Text>
+      </Box>
+
+      {/* Main action / status */}
       <Flex direction="column" align="center" gap={4} py={4} textAlign="center">
         {!hasCommitted ? (
           <>
-            <Box
-              w={12}
-              h={12}
+            <Flex
+              w={14}
+              h={14}
               rounded="full"
               bg="brand.subtle"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
+              align="center"
+              justify="center"
               color="brand.solid"
-              mb={1}
             >
-              <CheckCircle size={22} />
-            </Box>
+              <CheckCircle size={26} />
+            </Flex>
             <Box>
               <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
-                Submit key commitment
+                Generate your security key
               </Text>
               <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
-                Generate and submit your cryptographic key commitment to participate in the vault.
+                Your unique security key enables your participation in authorizing transactions from this vault.
               </Text>
             </Box>
             <Button
               onClick={handleSubmit}
               loading={isSubmitting}
-              loadingText="Submitting..."
+              loadingText="Submitting…"
               px={8}
+              gap={2}
             >
+              <CheckCircle size={15} />
               Generate & Submit
             </Button>
             {submitR1.error && (
@@ -129,58 +141,61 @@ export function CommitStep({ sessionId }: CommitStepProps) {
           </>
         ) : (
           <>
-            <Box
-              w={12}
-              h={12}
+            <Flex
+              w={14}
+              h={14}
               rounded="full"
               bg="status.successBg"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
+              align="center"
+              justify="center"
               color="status.success"
-              mb={1}
             >
-              <CheckCircle size={22} />
-            </Box>
+              <CheckCircle size={26} />
+            </Flex>
             <Box>
               <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
-                Submitted
+                Security key submitted
               </Text>
               <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
-                Submitted. Waiting for other members if any, or moving to the next step if all are submitted now.
+                Your key is in. Waiting for other members to submit theirs.
               </Text>
             </Box>
             <Flex align="center" gap={2} mt={1}>
               <Spinner size="xs" color="brand.solid" />
               <Text fontSize="2xs" color="fg.muted" fontWeight="medium">
-                {count === total ? "All submitted. Transitioning..." : `Waiting for other members (${count}/${total} joined)`}
+                {count === total
+                  ? "All members joined. Moving to next step…"
+                  : `Waiting for members · ${count} of ${total} joined`}
               </Text>
             </Flex>
           </>
         )}
       </Flex>
 
-      {/* Session ID */}
+      {/* Share session ID */}
       <Flex direction="column" gap={1.5}>
-        <Text fontFamily="body" fontSize="2xs" textTransform="uppercase" letterSpacing="widest" color="fg.muted">
-          Session ID
+        <Text fontFamily="body" fontSize="2xs" textTransform="uppercase" letterSpacing="widest" color="fg.muted" fontWeight="semibold">
+          Share with vault members
         </Text>
-        <Flex align="center" gap={2} py={2} px={3} rounded="md" bg="bg.subtle">
+        <Flex align="center" gap={2} py={2.5} px={3} rounded="lg" bg="bg.subtle" borderWidth={1} borderColor="border.default">
           <Text fontFamily="mono" fontSize="xs" color="fg.default" flex={1} truncate>
             {sessionId}
           </Text>
           <CopyButton text={sessionId} />
         </Flex>
+        <Text fontFamily="body" fontSize="2xs" color="fg.subtle">
+          Other members need this ID to join the vault setup.
+        </Text>
       </Flex>
 
-      {/* Progress */}
+      {/* Progress bar */}
       {total > 0 && (
         <Flex direction="column" gap={2}>
           <Flex justify="space-between" align="center">
             <Text fontFamily="body" fontSize="xs" color="fg.muted">
-              Commitments received
+              Members joined
             </Text>
-            <Text fontFamily="body" fontSize="xs" fontWeight="medium" color="fg.default">
+            <Text fontFamily="body" fontSize="xs" fontWeight="semibold" color="fg.default">
               {count} / {total}
             </Text>
           </Flex>
@@ -196,34 +211,50 @@ export function CommitStep({ sessionId }: CommitStepProps) {
         </Flex>
       )}
 
-      {/* Participants Checklist */}
+      {/* Participant checklist */}
       {session.participants.length > 0 && (
-        <Flex direction="column" gap={1.5}>
-          <Text fontFamily="body" fontSize="2xs" textTransform="uppercase" letterSpacing="widest" color="fg.muted">
-            Participants ({session.participants.length})
+        <Flex direction="column" gap={2}>
+          <Text fontFamily="body" fontSize="2xs" textTransform="uppercase" letterSpacing="widest" color="fg.muted" fontWeight="semibold">
+            Participants · {session.participants.length}
           </Text>
-          {session.participants.map((p, i) => {
-            const hasCommitted = !!session.round1_data[p.address];
-            return (
-              <Flex key={p.address} align="center" gap={3} py={2} px={3} rounded="md" bg="bg.subtle">
-                <Text fontFamily="mono" fontSize="2xs" color="fg.muted" w={4} flexShrink={0}>
-                  {i + 1}
-                </Text>
-                <Text fontFamily="mono" fontSize="xs" color="fg.default" truncate flex={1}>
-                  {p.address === stellarAddress
-                    ? `${p.address.slice(0, 12)}…${p.address.slice(-8)} (You)`
-                    : `${p.address.slice(0, 12)}…${p.address.slice(-8)}`}
-                </Text>
-                {hasCommitted ? (
-                  <Box color="status.success" flexShrink={0}>
-                    <CheckCircle size={16} />
-                  </Box>
-                ) : (
-                  <Spinner size="xs" color="fg.muted" flexShrink={0} />
-                )}
-              </Flex>
-            );
-          })}
+          <Flex direction="column" gap={1.5}>
+            {session.participants.map((p, i) => {
+              const committed = !!session.round1_data[p.address];
+              const isSelf = p.address === stellarAddress;
+              return (
+                <Flex
+                  key={p.address}
+                  align="center"
+                  gap={3}
+                  py={2.5}
+                  px={3}
+                  rounded="lg"
+                  bg="bg.subtle"
+                  borderWidth={1}
+                  borderColor="border.default"
+                >
+                  <Text fontFamily="mono" fontSize="2xs" color="fg.subtle" w={4} flexShrink={0}>
+                    {i + 1}
+                  </Text>
+                  <Text fontFamily="mono" fontSize="xs" color="fg.default" truncate flex={1}>
+                    {p.address.slice(0, 14)}…{p.address.slice(-8)}
+                    {isSelf && (
+                      <Text as="span" color="brand.solid" fontWeight="semibold">
+                        {" · you"}
+                      </Text>
+                    )}
+                  </Text>
+                  {committed ? (
+                    <Box color="status.success" flexShrink={0}>
+                      <CheckCircle size={15} />
+                    </Box>
+                  ) : (
+                    <Spinner size="xs" color="fg.subtle" flexShrink={0} />
+                  )}
+                </Flex>
+              );
+            })}
+          </Flex>
         </Flex>
       )}
     </Flex>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Box, Button, Flex, Spinner, Text } from "@chakra-ui/react";
-import { AlertCircle, CheckCircle } from "lucide-react";
+import { AlertCircle, CheckCircle, Zap } from "lucide-react";
 import { babyjubjub } from "@noble/curves/misc.js";
 import { hexToBytes } from "@noble/curves/utils.js";
 import { useWallet } from "@/context/wallet-context";
@@ -40,8 +40,8 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
     }
   }, [session?.group_id]);
 
-  // Persist this member's DKG key as soon as the session completes, so any
-  // member (not just the one who registers the group) can sign later.
+  // Persist this member's key as soon as the session completes so any member
+  // (not just the one who registers the group) can sign later.
   const savedKeyRef = useRef(false);
   useEffect(() => {
     if (savedKeyRef.current || !session || !stellarAddress) return;
@@ -96,8 +96,6 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
         };
       });
 
-      // Generate the common view key and encrypt it to each member's personal
-      // view key, so any member can later decrypt it from the group record.
       const gvk = generateGroupViewKey();
       const encryptedViewKeys: Record<string, string> = {};
       for (const p of session.participants) {
@@ -125,9 +123,9 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
         dkg_session_id: sessionId,
       });
     } catch (err) {
-      console.error("Error finalizing DKG round 3:", err);
+      console.error("Error finalizing vault setup:", err);
       setError(
-        err instanceof Error ? err.message : "DKG Round 3 computation failed",
+        err instanceof Error ? err.message : "Vault activation failed",
       );
     }
   };
@@ -142,18 +140,12 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
 
   if (sessionError || !session) {
     return (
-      <Flex
-        direction="column"
-        align="center"
-        gap={4}
-        py={12}
-        textAlign="center"
-      >
+      <Flex direction="column" align="center" gap={4} py={12} textAlign="center">
         <Box color="status.danger">
           <AlertCircle size={28} />
         </Box>
         <Text fontSize="sm" color="fg.default">
-          Failed to load DKG session details
+          Failed to load vault setup details
         </Text>
       </Flex>
     );
@@ -164,82 +156,77 @@ export function FinalizeStep({ sessionId }: FinalizeStepProps) {
   }
 
   return (
-    <Flex direction="column" gap={6} w="full">
+    <Flex direction="column" gap={7} w="full">
+      {/* Step title */}
+      <Box>
+        <Text fontFamily="heading" fontSize="lg" fontWeight="semibold" color="fg.default" mb={1}>
+          Activate Vault
+        </Text>
+        <Text fontFamily="body" fontSize="sm" color="fg.muted" lineHeight="relaxed">
+          All members have contributed. Complete the final step to activate your new multi-party vault.
+        </Text>
+      </Box>
+
+      {/* Main action / status */}
       <Flex direction="column" align="center" gap={4} py={4} textAlign="center">
         {!createGroupMutation.isPending ? (
           <>
-            <Box
-              w={12}
-              h={12}
+            <Flex
+              w={14}
+              h={14}
               rounded="full"
               bg="brand.subtle"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
+              align="center"
+              justify="center"
               color="brand.solid"
-              mb={1}
             >
-              <CheckCircle size={22} />
-            </Box>
+              <Zap size={26} />
+            </Flex>
             <Box>
-              <Text
-                fontFamily="heading"
-                fontSize="md"
-                fontWeight="semibold"
-                color="fg.default"
-              >
-                Finalize & register vault
+              <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
+                Ready to activate
               </Text>
-              <Text
-                fontFamily="body"
-                fontSize="xs"
-                color="fg.muted"
-                mt={1}
-                maxW="sm"
-                mx="auto"
-                lineHeight="relaxed"
-              >
-                All rounds are complete. Perform the final threshold key checks
-                and register the multisig vault.
+              <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
+                Compute the group approval key and register your vault. This only needs to be done by one member.
               </Text>
             </Box>
             <Button
               onClick={handleFinalize}
               loading={createGroupMutation.isPending}
-              loadingText="Registering..."
+              loadingText="Activating…"
               px={8}
+              gap={2}
             >
-              Finalize & Register Vault
+              <Zap size={14} />
+              Activate Vault
             </Button>
             {error && (
-              <Text color="status.danger" fontSize="xs" mt={2} maxW="sm">
-                {error}
-              </Text>
+              <Flex align="center" gap={2} py={2.5} px={3} rounded="lg" bg="status.dangerBg" borderWidth={1} borderColor="status.danger" maxW="sm">
+                <Text fontFamily="body" fontSize="xs" color="status.danger" textAlign="left">
+                  {error}
+                </Text>
+              </Flex>
             )}
           </>
         ) : (
           <>
-            <Spinner size="lg" color="brand.solid" />
+            <Flex
+              w={14}
+              h={14}
+              rounded="full"
+              bg="brand.subtle"
+              align="center"
+              justify="center"
+              color="brand.solid"
+            >
+              <Spinner size="lg" color="brand.solid" />
+            </Flex>
             <Box>
-              <Text
-                fontFamily="heading"
-                fontSize="md"
-                fontWeight="semibold"
-                color="fg.default"
-              >
-                Registering vault…
+              <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
+                Activating your vault…
               </Text>
-              <Text
-                fontFamily="body"
-                fontSize="xs"
-                color="fg.muted"
-                mt={1}
-                maxW="sm"
-                mx="auto"
-                lineHeight="relaxed"
-              >
-                Generating group public key, deriving verifying shares, and
-                registering the vault group details.
+              <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
+                Computing group approval keys and registering your vault on the network.
               </Text>
             </Box>
           </>

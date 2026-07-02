@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, Button, Flex, Spinner, Text } from "@chakra-ui/react";
-import { CheckCircle, AlertCircle } from "lucide-react";
+import { CheckCircle, Share2, AlertCircle } from "lucide-react";
 import { useWallet } from "@/context/wallet-context";
 import { useGetDkgSession } from "@/api/dkg/getDkgSession";
 import { useSubmitDkgRound2 } from "@/api/dkg/submitRound2";
@@ -71,7 +71,7 @@ export function ShareStep({ sessionId }: ShareStepProps) {
           <AlertCircle size={28} />
         </Box>
         <Text fontSize="sm" color="fg.default">
-          Failed to load DKG session details
+          Failed to load vault setup details
         </Text>
       </Flex>
     );
@@ -84,39 +84,49 @@ export function ShareStep({ sessionId }: ShareStepProps) {
   const hasSubmitted = stellarAddress ? !!session.round2_data[stellarAddress] : false;
 
   return (
-    <Flex direction="column" gap={6} w="full">
-      {/* Header */}
+    <Flex direction="column" gap={7} w="full">
+      {/* Step title */}
+      <Box>
+        <Text fontFamily="heading" fontSize="lg" fontWeight="semibold" color="fg.default" mb={1}>
+          Approval Keys
+        </Text>
+        <Text fontFamily="body" fontSize="sm" color="fg.muted" lineHeight="relaxed">
+          Securely exchange encrypted approval keys with other vault members to complete the setup.
+        </Text>
+      </Box>
+
+      {/* Main action / status */}
       <Flex direction="column" align="center" gap={4} py={4} textAlign="center">
         {!hasSubmitted ? (
           <>
-            <Box
-              w={12}
-              h={12}
+            <Flex
+              w={14}
+              h={14}
               rounded="full"
               bg="brand.subtle"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
+              align="center"
+              justify="center"
               color="brand.solid"
-              mb={1}
             >
-              <CheckCircle size={22} />
-            </Box>
+              <Share2 size={24} />
+            </Flex>
             <Box>
               <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
-                Submit threshold key shares
+                Share your approval keys
               </Text>
               <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
-                Generate and exchange encrypted threshold key shares with other participants.
+                Your encrypted approval keys will be shared with other members so the vault can verify signatures from each participant.
               </Text>
             </Box>
             <Button
               onClick={handleSubmit}
               loading={isSubmitting}
-              loadingText="Submitting..."
+              loadingText="Submitting…"
               px={8}
+              gap={2}
             >
-              Generate & Submit Shares
+              <Share2 size={14} />
+              Generate & Share
             </Button>
             {submitR2.error && (
               <Text color="status.danger" fontSize="xs">
@@ -126,45 +136,45 @@ export function ShareStep({ sessionId }: ShareStepProps) {
           </>
         ) : (
           <>
-            <Box
-              w={12}
-              h={12}
+            <Flex
+              w={14}
+              h={14}
               rounded="full"
               bg="status.successBg"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
+              align="center"
+              justify="center"
               color="status.success"
-              mb={1}
             >
-              <CheckCircle size={22} />
-            </Box>
+              <CheckCircle size={26} />
+            </Flex>
             <Box>
               <Text fontFamily="heading" fontSize="md" fontWeight="semibold" color="fg.default">
-                Submitted
+                Keys shared
               </Text>
               <Text fontFamily="body" fontSize="xs" color="fg.muted" mt={1} maxW="sm" mx="auto" lineHeight="relaxed">
-                Submitted. Waiting for other members if any, or moving to the next step if all are submitted now.
+                Your approval keys are in. Waiting for other members to share theirs.
               </Text>
             </Box>
             <Flex align="center" gap={2} mt={1}>
               <Spinner size="xs" color="brand.solid" />
               <Text fontSize="2xs" color="fg.muted" fontWeight="medium">
-                {count === total ? "All submitted. Transitioning..." : `Waiting for other members (${count}/${total} joined)`}
+                {count === total
+                  ? "All members ready. Moving to next step…"
+                  : `Waiting for members · ${count} of ${total} shared`}
               </Text>
             </Flex>
           </>
         )}
       </Flex>
 
-      {/* Progress */}
+      {/* Progress bar */}
       {total > 0 && (
         <Flex direction="column" gap={2}>
           <Flex justify="space-between" align="center">
             <Text fontFamily="body" fontSize="xs" color="fg.muted">
-              Shares submitted
+              Keys exchanged
             </Text>
-            <Text fontFamily="body" fontSize="xs" fontWeight="medium" color="fg.default">
+            <Text fontFamily="body" fontSize="xs" fontWeight="semibold" color="fg.default">
               {count} / {total}
             </Text>
           </Flex>
@@ -180,34 +190,50 @@ export function ShareStep({ sessionId }: ShareStepProps) {
         </Flex>
       )}
 
-      {/* Participants Checklist */}
+      {/* Participant checklist */}
       {session.participants.length > 0 && (
-        <Flex direction="column" gap={1.5}>
-          <Text fontFamily="body" fontSize="2xs" textTransform="uppercase" letterSpacing="widest" color="fg.muted">
-            Participants ({session.participants.length})
+        <Flex direction="column" gap={2}>
+          <Text fontFamily="body" fontSize="2xs" textTransform="uppercase" letterSpacing="widest" color="fg.muted" fontWeight="semibold">
+            Participants · {session.participants.length}
           </Text>
-          {session.participants.map((p, i) => {
-            const hasSubmittedR2 = !!session.round2_data[p.address];
-            return (
-              <Flex key={p.address} align="center" gap={3} py={2} px={3} rounded="md" bg="bg.subtle">
-                <Text fontFamily="mono" fontSize="2xs" color="fg.muted" w={4} flexShrink={0}>
-                  {i + 1}
-                </Text>
-                <Text fontFamily="mono" fontSize="xs" color="fg.default" truncate flex={1}>
-                  {p.address === stellarAddress
-                    ? `${p.address.slice(0, 12)}…${p.address.slice(-8)} (You)`
-                    : `${p.address.slice(0, 12)}…${p.address.slice(-8)}`}
-                </Text>
-                {hasSubmittedR2 ? (
-                  <Box color="status.success" flexShrink={0}>
-                    <CheckCircle size={16} />
-                  </Box>
-                ) : (
-                  <Spinner size="sm" color="fg.muted" flexShrink={0} />
-                )}
-              </Flex>
-            );
-          })}
+          <Flex direction="column" gap={1.5}>
+            {session.participants.map((p, i) => {
+              const hasSubmittedR2 = !!session.round2_data[p.address];
+              const isSelf = p.address === stellarAddress;
+              return (
+                <Flex
+                  key={p.address}
+                  align="center"
+                  gap={3}
+                  py={2.5}
+                  px={3}
+                  rounded="lg"
+                  bg="bg.subtle"
+                  borderWidth={1}
+                  borderColor="border.default"
+                >
+                  <Text fontFamily="mono" fontSize="2xs" color="fg.subtle" w={4} flexShrink={0}>
+                    {i + 1}
+                  </Text>
+                  <Text fontFamily="mono" fontSize="xs" color="fg.default" truncate flex={1}>
+                    {p.address.slice(0, 14)}…{p.address.slice(-8)}
+                    {isSelf && (
+                      <Text as="span" color="brand.solid" fontWeight="semibold">
+                        {" · you"}
+                      </Text>
+                    )}
+                  </Text>
+                  {hasSubmittedR2 ? (
+                    <Box color="status.success" flexShrink={0}>
+                      <CheckCircle size={15} />
+                    </Box>
+                  ) : (
+                    <Spinner size="xs" color="fg.subtle" flexShrink={0} />
+                  )}
+                </Flex>
+              );
+            })}
+          </Flex>
         </Flex>
       )}
     </Flex>

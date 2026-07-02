@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Box, Button, Flex, Spinner, Text } from "@chakra-ui/react";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, ArrowRight } from "lucide-react";
 import { getGroup, type GroupDetail } from "@/api/groups/getGroup";
 
 export function CompleteStep({ groupId }: { groupId: string }) {
@@ -27,17 +27,19 @@ export function CompleteStep({ groupId }: { groupId: string }) {
   return (
     <Flex direction="column" align="center" gap={8} py={4}>
       {/* Success icon */}
-      <Flex
-        w={16}
-        h={16}
-        rounded="full"
-        bg="status.successBg"
-        align="center"
-        justify="center"
-      >
-        <Box color="status.success">
-          <CheckCircle2 size={32} />
-        </Box>
+      <Flex direction="column" align="center" gap={1}>
+        <Flex
+          w={18}
+          h={18}
+          rounded="full"
+          bg="status.successBg"
+          align="center"
+          justify="center"
+        >
+          <Box color="status.success">
+            <CheckCircle2 size={36} />
+          </Box>
+        </Flex>
       </Flex>
 
       {/* Title + description */}
@@ -45,11 +47,12 @@ export function CompleteStep({ groupId }: { groupId: string }) {
         <Text
           as="h3"
           fontFamily="heading"
-          fontSize="xl"
+          fontSize="2xl"
           fontWeight="semibold"
           color="fg.default"
+          letterSpacing="-0.01em"
         >
-          Vault created
+          Vault is live!
         </Text>
         <Text
           fontFamily="body"
@@ -58,29 +61,37 @@ export function CompleteStep({ groupId }: { groupId: string }) {
           maxW="xs"
           lineHeight="relaxed"
         >
-          Your {group.threshold}-of-{group.total} multisig vault is ready. All
-          participants can now co-sign transactions.
+          Your {group.threshold}-of-{group.total} vault is ready. All members can now co-sign transactions.
         </Text>
       </Flex>
 
-      {/* Vault details card */}
+      {/* Vault details */}
       <Flex
         direction="column"
         w="full"
-        gap={3}
-        p={4}
-        rounded="md"
-        bg="bg.subtle"
+        gap={0}
+        rounded="xl"
+        overflow="hidden"
         borderWidth={1}
         borderColor="border.default"
+        boxShadow="surface"
       >
-        <Flex direction="column" gap={0.5}>
+        <Flex
+          direction="column"
+          gap={0.5}
+          px={4}
+          py={3}
+          borderBottomWidth={1}
+          borderColor="border.default"
+          bg="bg.subtle"
+        >
           <Text
             fontFamily="body"
             fontSize="2xs"
             textTransform="uppercase"
             letterSpacing="widest"
             color="fg.muted"
+            fontWeight="semibold"
           >
             Vault address
           </Text>
@@ -88,18 +99,25 @@ export function CompleteStep({ groupId }: { groupId: string }) {
             {shortAddr}
           </Text>
         </Flex>
-        <Flex direction="column" gap={0.5}>
+        <Flex
+          direction="column"
+          gap={0.5}
+          px={4}
+          py={3}
+          bg="bg.default"
+        >
           <Text
             fontFamily="body"
             fontSize="2xs"
             textTransform="uppercase"
             letterSpacing="widest"
             color="fg.muted"
+            fontWeight="semibold"
           >
-            Policy
+            Approval policy
           </Text>
-          <Text fontFamily="mono" fontSize="xs" color="fg.default">
-            {group.threshold} of {group.total} signatures
+          <Text fontFamily="mono" fontSize="sm" color="fg.default" fontWeight="semibold">
+            {group.threshold} of {group.total} signatures required
           </Text>
         </Flex>
       </Flex>
@@ -107,9 +125,12 @@ export function CompleteStep({ groupId }: { groupId: string }) {
       {/* CTA */}
       <Button
         w="full"
+        h={10}
+        gap={2}
         onClick={() => router.push("/")}
       >
-        Back to Home
+        Go to Dashboard
+        <ArrowRight size={15} />
       </Button>
     </Flex>
   );
